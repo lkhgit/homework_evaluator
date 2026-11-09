@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 /**
- * The task graph is the contract between the model and the rest of AccessLens.
+ * The task graph is the contract between the model and the rest of Homework evaluator.
  * The model's only job is turning assignment prose into this shape; every number
  * the interface shows is computed from it by lib/engine.ts, and every standards
  * citation is looked up from it by lib/standards.ts.
@@ -190,12 +190,12 @@ export const stepSchema = z.object({
   action: z
     .string()
     .describe(
-      "What the student does here, in plain language and the imperative-free third person, e.g. 'Reads the assignment instructions in Canvas'."
+      "What the student does here, in plain language and the imperative-free third person, e.g. 'Canvas에서 과제 지시사항을 읽습니다.'"
     ),
   environment: z
     .string()
     .describe(
-      "Where this happens, e.g. 'Canvas', 'PhET simulation', 'Google Docs', 'physical notebook'."
+      "Where this happens, e.g. 'Canvas', 'PhET 시뮬레이션', 'Google 문서', '실물 공책'."
     ),
   produces: z
     .array(z.string())
@@ -206,6 +206,11 @@ export const stepSchema = z.object({
     .array(z.string())
     .describe(
       "Identifiers from an earlier step's `produces` that the student must have at hand here. Empty when this step needs nothing carried forward."
+    ),
+  requires: z
+    .array(z.string())
+    .describe(
+      "Ids of the EARLIER steps that must already be finished before the student can start this one: if any of them were skipped, this step would be impossible. Only direct prerequisites — if step-3 needs step-2 and step-2 needs step-1, step-3 lists only step-2. Empty for a step that can start on its own."
     ),
   producedInfoStaysVisible: z
     .boolean()
@@ -242,7 +247,7 @@ export const frictionMomentSchema = z.object({
   title: z
     .string()
     .describe(
-      "Short name for what goes wrong here, phrased from the student's perspective, e.g. 'Results vanish before the quiz'."
+      "Short name for what goes wrong here, phrased from the student's perspective, e.g. '퀴즈를 시작하기 전에 결과가 사라집니다.'"
     ),
   stepIds: z
     .array(z.string())
@@ -291,7 +296,7 @@ export const objectiveCandidateSchema = z.object({
   text: z
     .string()
     .describe(
-      "A learning objective phrased as what the student should be able to do, e.g. 'Explain how concentration gradients influence molecular movement across a membrane.'"
+      "A learning objective phrased as what the student should be able to do, e.g. 농도 기울기가 막을 통한 분자의 이동에 미치는 영향을 설명하시오."
     ),
   source: z
     .string()
@@ -332,6 +337,20 @@ export const revisedAssignmentSchema = z.object({
       })
     )
     .describe("One entry per accepted repair, in the order they appear in the assignment."),
+  stepExcerpts: z
+    .array(
+      z.object({
+        stepId: z.string().describe("The id of a step from the supplied step list, exactly as given."),
+        excerpt: z
+          .string()
+          .describe(
+            "The sentence or clause of revisedText that tells the student to do this step, copied VERBATIM from revisedText. Never paraphrase."
+          ),
+      })
+    )
+    .describe(
+      "For each supplied step, the part of revisedText that instructs it. Leave out a step when revisedText has no sentence for it."
+    ),
 });
 
 /**
@@ -383,8 +402,14 @@ export const acceptedRepairSchema = z.object({
   rigorNote: z.string().trim().min(1),
 });
 
+export const previewStepSchema = z.object({
+  id: z.string().trim().min(1),
+  action: z.string().trim().min(1),
+});
+
 export const previewRequestSchema = analysisRequestSchema.extend({
   repairs: z.array(acceptedRepairSchema).min(1),
+  steps: z.array(previewStepSchema).default([]),
 });
 
 export const repairClassificationRequestSchema = z.object({

@@ -69,12 +69,14 @@ export interface AcceptedRepair {
 export async function generatePreview(
   assignmentText: string,
   lockedObjective: string,
-  repairs: AcceptedRepair[]
+  repairs: AcceptedRepair[],
+  steps: Array<{ id: string; action: string }>
 ): Promise<RevisedAssignment> {
   return post<RevisedAssignment>("/api/preview", {
     assignmentText,
     lockedObjective,
     repairs,
+    steps,
   });
 }
 
@@ -87,7 +89,7 @@ async function post<T>(url: string, body: unknown): Promise<T> {
 
   if (!response) {
     throw new AnalysisUnavailableError(
-      "Could not reach the analysis service. Check your connection and try again."
+      "분석 서비스에 연결할 수 없습니다. 연결 상태를 확인하고 다시 시도해주세요."
     );
   }
 
@@ -97,7 +99,7 @@ async function post<T>(url: string, body: unknown): Promise<T> {
       .then((data: { error?: string }) => data.error)
       .catch(() => null);
     throw new AnalysisUnavailableError(
-      message ?? "The analysis service returned an error. Try again."
+      message ?? "분석 서비스에서 오류가 발생했습니다. 다시 시도해주세요."
     );
   }
 

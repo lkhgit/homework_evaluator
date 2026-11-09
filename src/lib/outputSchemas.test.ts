@@ -1,8 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
-import type { ZodType } from "zod";
+import { z, type ZodType } from "zod";
 
 import {
   analysisSchema,
@@ -14,18 +13,14 @@ import {
 } from "./schema";
 
 /**
- * Structured outputs compile a grammar from the schema, and the API rejects one
- * that grows too large. The whole task graph in a single request crossed that
- * line and surfaced to educators as "the analysis service could not be
- * reached", which pointed at the network rather than at the schema.
- *
- * The limit is not published as a number, so these bounds are empirical: the
- * whole graph measured 304 nodes and was rejected, while every schema actually
- * sent measured 184 or fewer and was accepted. A budget between the two fails
- * here, offline and in a second, rather than in production.
+ * Structured-output APIs compile the schema into something with its own size
+ * limit, and Anthropic's rejected the whole task graph in a single request —
+ * which is why /api/analyze is split into two passes. OpenAI's limit is not
+ * published either, so rather than guess a new magic number this just checks
+ * the property that made the split necessary in the first place: the full
+ * analysis is meaningfully bigger than either piece actually sent to the
+ * model, and the repair shape stays out of pass one.
  */
-const NODE_BUDGET = 220;
-
 function nodeCount(value: unknown): number {
   if (Array.isArray(value)) return value.reduce<number>((sum, item) => sum + nodeCount(item), 0);
   if (value && typeof value === "object") {
@@ -35,11 +30,10 @@ function nodeCount(value: unknown): number {
 }
 
 function sizeOf(schema: ZodType): number {
-  const format = zodOutputFormat(schema as never) as unknown as { schema: unknown };
-  return nodeCount(format.schema);
+  return nodeCount(z.toJSONSchema(schema));
 }
 
-// Every schema passed to output_config.format anywhere in the app.
+// Every schema passed as the response format anywhere in the app.
 const SENT_TO_THE_MODEL: Array<[string, ZodType]> = [
   ["objectiveExtractionSchema", objectiveExtractionSchema],
   ["taskGraphSchema", taskGraphSchema],
@@ -48,26 +42,25 @@ const SENT_TO_THE_MODEL: Array<[string, ZodType]> = [
   ["revisedAssignmentSchema", revisedAssignmentSchema],
 ];
 
+const analysisSize = sizeOf(analysisSchema);
+
 for (const [name, schema] of SENT_TO_THE_MODEL) {
-  test(`${name} stays inside the grammar budget`, () => {
+  test(`${name} stays smaller than the full analysis`, () => {
     const size = sizeOf(schema);
     assert.ok(
-      size <= NODE_BUDGET,
-      `${name} compiled to ${size} nodes, over the ${NODE_BUDGET} budget. Split it across another request rather than raising this number: the API rejects an oversized grammar outright.`
+      size < analysisSize,
+      `${name} compiled to ${size} nodes, no smaller than the ${analysisSize}-node full analysis it is supposed to be a piece of.`
     );
   });
 }
 
 test("the full analysis is assembled locally, never requested in one call", () => {
-  // Kept as a reminder of why the split exists. If this ever drops under the
-  // budget the two passes could be merged again, but not before.
-  assert.ok(
-    sizeOf(analysisSchema) > NODE_BUDGET,
-    "analysisSchema now fits; the two-pass split in /api/analyze could be reconsidered"
-  );
+  // Kept as a reminder of why the split exists. If either pass is ever
+  // enlarged to cover the whole analysisSchema shape, the split can be
+  // reconsidered — but not silently.
   assert.equal(
     "repair" in (taskGraphSchema.shape.steps.element.shape as Record<string, unknown>),
     false,
-    "the repair must stay out of pass one, which is what brought the graph under the limit"
+    "the repair must stay out of pass one, which is what the two-pass split relies on"
   );
 });

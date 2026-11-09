@@ -4,11 +4,11 @@ import { test } from "node:test";
 import { CONDITIONS, type ConditionContext } from "@/components/WorkflowScreens";
 import { runEngine } from "./engine";
 import { applyRepairs } from "./repairs";
-import { BIOLOGY_SAMPLE, BIOLOGY_TEXT } from "@/samples/biology";
+import { BIOLOGY_SAMPLE } from "@/samples/biology";
 
 const analysis = BIOLOGY_SAMPLE.analysis;
-const contextFor = (a: typeof analysis, text = BIOLOGY_TEXT): ConditionContext => {
-  const report = runEngine(a, text);
+const contextFor = (a: typeof analysis): ConditionContext => {
+  const report = runEngine(a);
   return { memory: report.memory, timing: report.timing };
 };
 

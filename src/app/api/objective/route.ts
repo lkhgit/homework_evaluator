@@ -1,9 +1,8 @@
 import { NextResponse } from "next/server";
 
-import { MODEL, SYSTEM_PROMPT, describeModelFailure, getClient } from "@/lib/claude";
+import { describeModelFailure, generateStructured } from "@/lib/openai";
 import { LIGHT_LIMIT, checkRateLimit } from "@/lib/rateLimit";
 import { objectiveExtractionSchema, objectiveRequestSchema } from "@/lib/schema";
-import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 
 export const maxDuration = 60;
 
@@ -12,7 +11,7 @@ export async function POST(request: Request) {
   const parsed = objectiveRequestSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json(
-      { error: "Paste the full assignment text so there is something to analyse." },
+      { error: "과제 전체 내용을 붙여넣어야 분석할 것이 있습니다." },
       { status: 400 }
     );
   }
@@ -28,39 +27,27 @@ export async function POST(request: Request) {
   const { assignmentText } = parsed.data;
 
   try {
-    const response = await getClient().messages.parse({
-      model: MODEL,
-      max_tokens: 2000,
-      system: [
-        {
-          type: "text",
-          text: SYSTEM_PROMPT,
-          cache_control: { type: "ephemeral", ttl: "1h" },
-        },
-      ],
-      output_config: { format: zodOutputFormat(objectiveExtractionSchema) },
-      messages: [
-        {
-          role: "user",
-          content: `Identify what this assignment is actually trying to teach. Give at most three candidate learning objectives, most likely first, each phrased as what the student should be able to do.
+    const objective = await generateStructured({
+      name: "objective_extraction",
+      prompt: `Identify what this assignment is actually trying to teach. Give at most three candidate learning objectives, most likely first, each phrased as what the student should be able to do.
 
 If the assignment states an objective explicitly, quote it as the source. Otherwise infer it from the content and set source to "inferred".
 
 <assignment>
 ${assignmentText}
 </assignment>`,
-        },
-      ],
+      schema: objectiveExtractionSchema,
+      effort: "minimal",
+      maxOutputTokens: 2000,
     });
-
-    if (!response.parsed_output) {
+    if (!objective) {
       return NextResponse.json(
-        { error: "Could not read a learning objective from that assignment." },
+        { error: "이 과제에서 학습 목표를 읽어내지 못했습니다." },
         { status: 502 }
       );
     }
 
-    return NextResponse.json(response.parsed_output);
+    return NextResponse.json(objective);
   } catch (error) {
     console.error("objective extraction failed", error);
     const failure = describeModelFailure(error);

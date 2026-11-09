@@ -47,6 +47,7 @@ const steps: Step[] = [
     environment: "Canvas",
     produces: [],
     consumes: [],
+    requires: [],
     producedInfoStaysVisible: true,
     demands: {
       workingMemory: 1,
@@ -71,6 +72,7 @@ const steps: Step[] = [
     environment: "External article",
     produces: ["gradient_concept"],
     consumes: [],
+    requires: ["s1"],
     producedInfoStaysVisible: false,
     demands: {
       workingMemory: 2,
@@ -95,6 +97,7 @@ const steps: Step[] = [
     environment: "PhET simulation",
     produces: [],
     consumes: [],
+    requires: ["s1"],
     producedInfoStaysVisible: true,
     demands: {
       workingMemory: 0,
@@ -119,6 +122,7 @@ const steps: Step[] = [
     environment: "PhET simulation",
     produces: [],
     consumes: [],
+    requires: ["s3"],
     producedInfoStaysVisible: true,
     demands: {
       workingMemory: 1,
@@ -151,6 +155,7 @@ const steps: Step[] = [
     environment: "PhET simulation",
     produces: TRIALS,
     consumes: [],
+    requires: ["s4"],
     producedInfoStaysVisible: false,
     demands: {
       workingMemory: 3,
@@ -183,6 +188,7 @@ const steps: Step[] = [
     environment: "Canvas",
     produces: [],
     consumes: [],
+    requires: ["s5"],
     producedInfoStaysVisible: true,
     demands: {
       workingMemory: 2,
@@ -207,6 +213,7 @@ const steps: Step[] = [
     environment: "Canvas",
     produces: [],
     consumes: [],
+    requires: ["s6"],
     producedInfoStaysVisible: true,
     demands: {
       workingMemory: 1,
@@ -239,6 +246,7 @@ const steps: Step[] = [
     environment: "Canvas quiz",
     produces: [],
     consumes: TRIALS,
+    requires: ["s7", "s5"],
     producedInfoStaysVisible: true,
     demands: {
       workingMemory: 3,
@@ -273,6 +281,7 @@ const steps: Step[] = [
     environment: "Canvas quiz",
     produces: [],
     consumes: ["gradient_concept"],
+    requires: ["s7", "s2"],
     producedInfoStaysVisible: true,
     demands: {
       workingMemory: 2,
@@ -311,6 +320,7 @@ const steps: Step[] = [
     environment: "Recording tool",
     produces: [],
     consumes: ["gradient_concept"],
+    requires: ["s5", "s2"],
     producedInfoStaysVisible: true,
     demands: {
       workingMemory: 2,
@@ -345,6 +355,7 @@ const steps: Step[] = [
     environment: "Canvas",
     produces: [],
     consumes: [],
+    requires: ["s8", "s9", "s10"],
     producedInfoStaysVisible: true,
     demands: {
       workingMemory: 1,

@@ -25,12 +25,14 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import DemandChips, { chipsForDemands } from "@/components/DemandChips";
+import JourneyDiagram from "@/components/JourneyDiagram";
 import { useWorkflow, type ConditionId } from "@/components/WorkflowContext";
 import { generatePreview } from "@/lib/analysisSource";
 import type { EngineReport } from "@/lib/engine";
 import { locateEvidence } from "@/lib/evidenceGuard";
 import { timeConstraintChangesOf } from "@/lib/schema";
 import type { Analysis, FrictionMoment, GoalRelevance, RepairEffects, RevisedAssignment, Step } from "@/lib/schema";
+import { diffWords, type DiffSegment } from "@/lib/textDiff";
 
 function ScreenHeading({
   eyebrow,
@@ -84,11 +86,11 @@ export function AnalyzeScreen({ text, onChange, onSubmit, hasAnalysis = false }:
       const extracted = await extractPdfText(file);
       onChange(extracted);
       const words = extracted.split(/\s+/).length;
-      setFileNote({ tone: "ok", text: `Read ${words.toLocaleString()} words from ${file.name}. Check it below, then analyse.` });
+      setFileNote({ tone: "ok", text: `${file.name}에서 단어 ${words.toLocaleString()}개를 읽었습니다. 아래에서 확인한 뒤 분석하세요.` });
     } catch (error) {
       setFileNote({
         tone: "error",
-        text: error instanceof Error ? error.message : "That file could not be read.",
+        text: error instanceof Error ? error.message : "이 파일을 읽을 수 없습니다.",
       });
     } finally {
       setReading(false);
@@ -98,20 +100,20 @@ export function AnalyzeScreen({ text, onChange, onSubmit, hasAnalysis = false }:
   return (
     <main className="workflow-main">
       <ScreenHeading
-        eyebrow={hasAnalysis ? "Assignment" : "New analysis"}
-        title={hasAnalysis ? "Your assignment" : "Analyze a learning task"}
+        eyebrow={hasAnalysis ? "과제" : "새 분석"}
+        title={hasAnalysis ? "내 과제" : "학습 과제 분석하기"}
         subtitle={
           hasAnalysis
-            ? "Edit the text and re-analyse, or use the steps above to return to your results."
-            : "Paste an assignment, upload content, or provide an online learning experience."
+            ? "내용을 수정하고 다시 분석하거나, 위 단계를 이용해 결과 화면으로 돌아가세요."
+            : "과제 내용을 붙여넣거나 PDF 파일을 업로드하세요."
         }
       />
 
       <div className="analysis-grid">
         <section className="document-panel" aria-labelledby="assignment-input-heading">
-          <div className="input-tabs" role="tablist" aria-label="Assignment source">
+          <div className="input-tabs" role="tablist" aria-label="과제 입력 방식">
             <button type="button" role="tab" aria-selected="true" id="assignment-input-heading">
-              <FileText size={16} aria-hidden="true" /> Paste text
+              <FileText size={16} aria-hidden="true" /> 텍스트 붙여넣기
             </button>
             <button
               type="button"
@@ -120,10 +122,10 @@ export function AnalyzeScreen({ text, onChange, onSubmit, hasAnalysis = false }:
               onClick={() => fileInput.current?.click()}
               disabled={reading}
             >
-              <Upload size={15} aria-hidden="true" /> {reading ? "Reading PDF…" : "Upload PDF"}
+              <Upload size={15} aria-hidden="true" /> {reading ? "PDF 읽는 중…" : "PDF 업로드"}
             </button>
             <button type="button" role="tab" aria-selected="false" disabled>
-              <Link2 size={15} aria-hidden="true" /> Enter URL <span>Roadmap</span>
+              <Link2 size={15} aria-hidden="true" /> URL 입력 <span>준비 중</span>
             </button>
           </div>
           <input
@@ -131,7 +133,7 @@ export function AnalyzeScreen({ text, onChange, onSubmit, hasAnalysis = false }:
             type="file"
             accept="application/pdf,.pdf"
             className="sr-only"
-            aria-label="Upload a PDF assignment"
+            aria-label="PDF 과제 업로드"
             onChange={handleFile}
           />
           {fileNote && (
@@ -142,7 +144,7 @@ export function AnalyzeScreen({ text, onChange, onSubmit, hasAnalysis = false }:
               {fileNote.text}
             </p>
           )}
-          <label htmlFor="assignment-text" className="sr-only">Assignment text</label>
+          <label htmlFor="assignment-text" className="sr-only">과제 내용</label>
           <textarea
             id="assignment-text"
             value={text}
@@ -153,26 +155,26 @@ export function AnalyzeScreen({ text, onChange, onSubmit, hasAnalysis = false }:
           <div className="document-footer">
             <p id="prototype-note">
               {hasAnalysis
-                ? "Re-analysing replaces your current results and repairs."
-                : "Analysed live · the sample assignment answers instantly"}
+                ? "다시 분석하면 현재 결과와 개선안이 대체됩니다."
+                : "실시간으로 분석됩니다 · 샘플 과제는 즉시 결과가 나옵니다"}
             </p>
             <ArrowButton onClick={onSubmit} disabled={text.trim().length === 0 || reading}>
-              {hasAnalysis ? "Re-analyse task" : "Analyze task"}
+              {hasAnalysis ? "과제 다시 분석하기" : "과제 분석하기"}
             </ArrowButton>
           </div>
         </section>
 
         <aside className="tips-panel" aria-labelledby="tips-title">
           <div className="tips-icon" aria-hidden="true"><Sparkles size={18} /></div>
-          <h2 id="tips-title">For the best analysis</h2>
+          <h2 id="tips-title">더 나은 분석을 위해</h2>
           <ul>
-            <li><Check size={15} aria-hidden="true" /> Include full student instructions</li>
-            <li><Check size={15} aria-hidden="true" /> Include the learning objective</li>
-            <li><Check size={15} aria-hidden="true" /> Include links when relevant</li>
+            <li><Check size={15} aria-hidden="true" /> 학생용 지시문 전체를 포함하세요</li>
+            <li><Check size={15} aria-hidden="true" /> 학습 목표를 포함하세요</li>
+            <li><Check size={15} aria-hidden="true" /> 관련 있는 링크를 포함하세요</li>
           </ul>
           <div className="tip-note">
-            <p>What AccessLens looks for</p>
-            <span>Actions, transitions, memory demands, interaction precision, timing, and response modes.</span>
+            <p>Homework evaluator가 살펴보는 것</p>
+            <span>행동, 전환, 기억 부담, 상호작용 정밀도, 시간, 응답 방식.</span>
           </div>
         </aside>
       </div>
@@ -189,22 +191,22 @@ export function AnalyzeScreen({ text, onChange, onSubmit, hasAnalysis = false }:
  */
 const PHASE_COPY = {
   objective: {
-    eyebrow: "Step 1 of 2 · reading the assignment",
+    eyebrow: "1/2단계 · 과제 읽는 중",
     messages: [
-      "Reading the assignment…",
-      "Working out what it is meant to teach…",
+      "과제를 읽는 중…",
+      "무엇을 가르치려는 과제인지 파악하는 중…",
     ],
     /** Objective extraction usually returns in a few seconds. */
     cadenceMs: 1800,
   },
   analysis: {
-    eyebrow: "Step 2 of 2 · reading the task as a journey",
+    eyebrow: "2/2단계 · 과제를 행동 단위로 분석하는 중",
     messages: [
-      "Breaking the task into student actions…",
-      "Mapping functional demands…",
-      "Tracing accessibility friction…",
-      "Comparing demands with the learning goal…",
-      "Preparing recommendations…",
+      "과제를 학생의 행동 단위로 나누는 중…",
+      "기능적 부담을 정리하는 중…",
+      "접근성 어려움을 찾는 중…",
+      "부담을 학습 목표와 비교하는 중…",
+      "개선안을 준비하는 중…",
     ],
     /** The full analysis runs far longer, so the messages are paced to match. */
     cadenceMs: 7000,
@@ -236,8 +238,8 @@ export function AnalysisLoadingScreen({ phase = "analysis" }: { phase?: LoadingP
       <h1 data-screen-heading tabIndex={-1}>{messages[messageIndex]}</h1>
       <p>
         {onLastMessage
-          ? "Still working — larger assignments take longer."
-          : `${messageIndex + 1} of ${messages.length}`}
+          ? "아직 진행 중입니다 — 과제가 길수록 시간이 더 걸립니다."
+          : `${messages.length}단계 중 ${messageIndex + 1}단계`}
       </p>
     </main>
   );
@@ -256,18 +258,19 @@ export function GoalLockScreen({ objective, onEdit, onLock }: GoalLockScreenProp
   return (
     <main className="workflow-main goal-screen">
       <ScreenHeading
-        eyebrow="Goal lock"
-        title="Lock the learning goal"
-        subtitle="Confirm what students are actually expected to learn. We’ll protect this goal while suggesting accessibility improvements."
+        eyebrow="목표 확정"
+        title="학습 목표 확정하기"
+        subtitle="학생들이 실제로 배워야 할 것이 무엇인지 확인하세요. Homework evaluator는 접근성 개선을 제안하는 동안 이 목표를 그대로 지킵니다."
       />
-      <section className={`goal-orbit ${locked ? "is-locked" : ""}`} aria-labelledby="goal-label">
-        <span className="goal-ring goal-ring--one" aria-hidden="true" />
-        <span className="goal-ring goal-ring--two" aria-hidden="true" />
-        <span className="goal-lock-icon" aria-hidden="true"><LockKeyhole size={21} /></span>
+      <section className={`goal-panel ${locked ? "is-locked" : ""}`} aria-labelledby="goal-label">
+        <div className="goal-panel-head">
+          <span className="goal-lock-icon" aria-hidden="true"><LockKeyhole size={19} /></span>
+          <p className="eyebrow" id="goal-label">학습 목표</p>
+          {locked && <span className="goal-locked-badge">확정됨</span>}
+        </div>
         <div className="goal-content">
-          <p className="eyebrow" id="goal-label">Learning goal</p>
           {editing ? (
-            <textarea value={objective} onChange={(event) => onEdit(event.target.value)} aria-label="Learning goal" autoFocus />
+            <textarea value={objective} onChange={(event) => onEdit(event.target.value)} aria-label="학습 목표" autoFocus />
           ) : (
             <blockquote>“{objective}”</blockquote>
           )}
@@ -277,17 +280,17 @@ export function GoalLockScreen({ objective, onEdit, onLock }: GoalLockScreenProp
       {!locked ? (
         <div className="goal-actions">
           <button type="button" className="button button--secondary" onClick={() => setEditing((value) => !value)}>
-            <Pencil size={16} aria-hidden="true" /> {editing ? "Finish editing" : "Edit goal"}
+            <Pencil size={16} aria-hidden="true" /> {editing ? "수정 완료" : "목표 수정"}
           </button>
           <button type="button" className="button button--primary" onClick={() => { setEditing(false); setLocked(true); }} disabled={!objective.trim()}>
-            <LockKeyhole size={16} aria-hidden="true" /> Confirm &amp; lock goal
+            <LockKeyhole size={16} aria-hidden="true" /> 목표 확인 및 확정
           </button>
         </div>
       ) : (
         <div className="goal-confirmation" aria-live="polite">
-          <p><CheckCircle2 size={18} aria-hidden="true" /> Goal Locked</p>
-          <span>Recommendations may change how students access or demonstrate learning, but not what students are expected to learn.</span>
-          <ArrowButton onClick={onLock}>Continue</ArrowButton>
+          <p><CheckCircle2 size={18} aria-hidden="true" /> 목표가 확정되었습니다</p>
+          <span>개선안은 학생이 학습에 접근하거나 학습을 증명하는 방식을 바꿀 수는 있지만, 학생이 배워야 할 내용 자체는 바꾸지 않습니다.</span>
+          <ArrowButton onClick={onLock}>계속하기</ArrowButton>
         </div>
       )}
     </main>
@@ -295,13 +298,13 @@ export function GoalLockScreen({ objective, onEdit, onLock }: GoalLockScreenProp
 }
 
 const RELEVANCE_LABEL: Record<GoalRelevance, string> = {
-  essential: "Essential",
-  related: "Related",
-  incidental: "Incidental",
-  unknown: "Needs review",
+  essential: "필수",
+  related: "관련",
+  incidental: "무관",
+  unknown: "검토 필요",
 };
 
-const SEVERITY_LABEL = { high: "High", medium: "Moderate", low: "Low" } as const;
+const SEVERITY_LABEL = { high: "높음", medium: "보통", low: "낮음" } as const;
 
 export interface JourneyScanProps { analysis: Analysis; report: EngineReport }
 
@@ -350,7 +353,7 @@ function nodeLabel(action: string): string {
 
 export function JourneyScan({ analysis, report }: JourneyScanProps) {
   const { goTo, selectFriction } = useWorkflow();
-  const journeyPathRef = useRef<HTMLOListElement>(null);
+  const journeyDiagramRef = useRef<HTMLDivElement>(null);
   const [selectedStepId, setSelectedStepId] = useState(() => (
     analysis.steps.find((step) => analysis.frictionMoments.some((friction) => friction.stepIds.includes(step.id)))?.id
     ?? analysis.steps[0]?.id
@@ -379,7 +382,7 @@ export function JourneyScan({ analysis, report }: JourneyScanProps) {
     window.requestAnimationFrame(() => {
       const scrollTarget = usesVerticalTimeline
         ? document.getElementById("journey-step-detail")
-        : journeyPathRef.current?.children[index];
+        : journeyDiagramRef.current?.querySelector(`[data-step-id="${CSS.escape(nextStep.id)}"]`);
       scrollTarget?.scrollIntoView({
         behavior: prefersReducedMotion ? "auto" : "smooth",
         block: usesVerticalTimeline ? "start" : "nearest",
@@ -398,24 +401,24 @@ export function JourneyScan({ analysis, report }: JourneyScanProps) {
   return (
     <main className="workflow-main journey-screen">
       <ScreenHeading
-        eyebrow="Journey scan"
-        title="The task, seen as a student journey"
-        subtitle="We break the task into real student actions to reveal where accessibility friction occurs."
+        eyebrow="과제 분석"
+        title="학생의 관점에서 분석"
+        subtitle="과제를 학생의 실제 행동 단위로 나누어 접근성 어려움이 어디서 생기는지 보여드립니다."
       />
       <section className="journey-explorer" aria-labelledby="journey-overview-title">
         <header className="journey-toolbar">
           <div>
-            <p className="eyebrow">Journey overview</p>
-            <h2 id="journey-overview-title">Follow the task step by step</h2>
-            <p>Select a step to inspect its environment, demands, and accessibility friction.</p>
+            <p className="eyebrow">과제 개요</p>
+            <h2 id="journey-overview-title">단계별로 과제를 따라가보세요</h2>
+            <p>단계를 선택하면 해당 환경, 부담, 접근성 어려움을 자세히 볼 수 있습니다.</p>
           </div>
-          <nav className="journey-controls" aria-label="Journey step controls">
-            <span aria-live="polite">Step {selectedStepIndex + 1} of {analysis.steps.length}</span>
+          <nav className="journey-controls" aria-label="과제 단계 이동">
+            <span aria-live="polite">{analysis.steps.length}단계 중 {selectedStepIndex + 1}단계</span>
             <button
               type="button"
               onClick={() => selectStep(selectedStepIndex - 1)}
               disabled={selectedStepIndex === 0}
-              aria-label="View previous step"
+              aria-label="이전 단계 보기"
             >
               <ArrowLeft size={17} aria-hidden="true" />
             </button>
@@ -423,68 +426,45 @@ export function JourneyScan({ analysis, report }: JourneyScanProps) {
               type="button"
               onClick={() => selectStep(selectedStepIndex + 1)}
               disabled={selectedStepIndex === analysis.steps.length - 1}
-              aria-label="View next step"
+              aria-label="다음 단계 보기"
             >
               <ArrowRight size={17} aria-hidden="true" />
             </button>
           </nav>
         </header>
 
-        <dl className="journey-summary" aria-label="Journey summary">
-          <div><dt>Friction moments</dt><dd>{analysis.frictionMoments.length}</dd></div>
-          <div><dt>Incidental demands</dt><dd>{incidental}</dd></div>
-          <div><dt>Essential demands with risk</dt><dd>{essentialRisks}</dd></div>
-          <div><dt>Learning environments</dt><dd>{report.switching.uniqueEnvironments.length}</dd></div>
+        <dl className="journey-summary" aria-label="과제 요약">
+          <div><dt>어려움</dt><dd>{analysis.frictionMoments.length}</dd></div>
+          <div><dt>목표와 무관한 부담</dt><dd>{incidental}</dd></div>
+          <div><dt>위험이 있는 필수 부담</dt><dd>{essentialRisks}</dd></div>
+          <div><dt>학습 환경 수</dt><dd>{report.switching.uniqueEnvironments.length}</dd></div>
         </dl>
 
-        <div className="journey-scroll" aria-label={`${analysis.steps.length} task steps`}>
-          <ol className="journey-path" ref={journeyPathRef}>
-          {analysis.steps.map((step, index) => {
-            const frictions = frictionByStep.get(step.id) ?? [];
-            const primaryFriction = frictions[0];
-            const isSelected = step.id === selectedStep?.id;
-            return (
-              <li key={step.id} className={`journey-step${isSelected ? " is-selected" : ""}`}>
-                <button
-                  type="button"
-                  className="journey-card"
-                  onClick={() => selectStep(index)}
-                  aria-current={isSelected ? "step" : undefined}
-                  aria-controls="journey-step-detail"
-                >
-                  <span className="journey-card-topline">
-                    <span className="node-number">{String(index + 1).padStart(2, "0")}</span>
-                    <span className={`relevance-pill relevance-${step.goalRelevance}`}>{RELEVANCE_LABEL[step.goalRelevance]}</span>
-                  </span>
-                  <strong className="node-label">{nodeLabel(step.action)}</strong>
-                  <span className="journey-environment"><Link2 size={14} aria-hidden="true" /> {step.environment}</span>
-                  {primaryFriction ? (
-                    <span className={`journey-status severity-${primaryFriction.severity}`}>
-                      <AlertTriangle size={14} aria-hidden="true" />
-                      {SEVERITY_LABEL[primaryFriction.severity]}
-                      {frictions.length > 1 && <small>{frictions.length} issues</small>}
-                    </span>
-                  ) : (
-                    <span className="journey-status journey-status--clear"><Check size={14} aria-hidden="true" /> No friction flagged</span>
-                  )}
-                </button>
-              </li>
-            );
-          })}
-          </ol>
+        <div className="journey-scroll" aria-label={`전체 ${analysis.steps.length}개 과제 단계`}>
+          <JourneyDiagram
+            ref={journeyDiagramRef}
+            analysis={analysis}
+            report={report}
+            selectedStepId={selectedStep?.id}
+            frictionByStep={frictionByStep}
+            onSelect={selectStep}
+            nodeLabel={(step) => nodeLabel(step.action)}
+            relevanceLabel={RELEVANCE_LABEL}
+            severityLabel={SEVERITY_LABEL}
+          />
         </div>
 
         {selectedStep && (
           <article className="journey-step-detail" id="journey-step-detail" aria-labelledby="selected-step-title">
             <div className="journey-step-context">
-              <p className="eyebrow">Selected step · {String(selectedStepIndex + 1).padStart(2, "0")}</p>
+              <p className="eyebrow">선택한 단계 · {String(selectedStepIndex + 1).padStart(2, "0")}</p>
               <h2 id="selected-step-title">{imperativeAction(selectedStep.action)}</h2>
               <div className="journey-step-meta">
                 <span><Link2 size={14} aria-hidden="true" /> {selectedStep.environment}</span>
-                <span>{RELEVANCE_LABEL[selectedStep.goalRelevance]} to goal</span>
+                <span>목표와의 관련성: {RELEVANCE_LABEL[selectedStep.goalRelevance]}</span>
               </div>
               <div className="journey-demand-block">
-                <h3>Functional demands</h3>
+                <h3>기능적 부담</h3>
                 <DemandChips demands={selectedStep.demands} />
               </div>
             </div>
@@ -492,13 +472,13 @@ export function JourneyScan({ analysis, report }: JourneyScanProps) {
             <div className="journey-friction-detail">
               {selectedFrictions.length > 0 ? (
                 <>
-                  <p className="eyebrow">Friction at this step</p>
+                  <p className="eyebrow">이 단계의 어려움</p>
                   <div className="journey-friction-list">
                     {selectedFrictions.map((friction) => (
                       <section key={friction.id} className="journey-friction-card" aria-labelledby={`friction-title-${friction.id}`}>
                         <div className="journey-friction-heading">
                           <span className={`severity-${friction.severity}`}><AlertTriangle size={14} aria-hidden="true" /> {SEVERITY_LABEL[friction.severity]}</span>
-                          <span>Affects steps {affectedStepNumbers(friction)}</span>
+                          <span>{affectedStepNumbers(friction)}단계에 영향</span>
                         </div>
                         <h3 id={`friction-title-${friction.id}`}>{friction.title}</h3>
                         <p>{friction.explanation}</p>
@@ -507,7 +487,7 @@ export function JourneyScan({ analysis, report }: JourneyScanProps) {
                           className="button button--secondary button--small"
                           onClick={() => { selectFriction(friction); goTo("barrier"); }}
                         >
-                          Review friction <ArrowRight size={15} aria-hidden="true" />
+                          어려움 확인하기 <ArrowRight size={15} aria-hidden="true" />
                         </button>
                       </section>
                     ))}
@@ -517,8 +497,8 @@ export function JourneyScan({ analysis, report }: JourneyScanProps) {
                 <div className="journey-no-friction">
                   <span><CheckCircle2 size={19} aria-hidden="true" /></span>
                   <div>
-                    <h3>No friction flagged here</h3>
-                    <p>This step does not contain a detected accessibility barrier.</p>
+                    <h3>이 단계에는 어려움이 없습니다</h3>
+                    <p>이 단계에서는 접근성 문제가 발견되지 않았습니다.</p>
                   </div>
                 </div>
               )}
@@ -552,37 +532,49 @@ function HighlightedEvidence({ assignmentText, evidence }: { assignmentText: str
   );
 }
 
+const BARRIER_CATEGORY_LABEL: Record<string, string> = {
+  working_memory: "작업 기억",
+  context_switching: "환경 전환",
+  fine_motor: "소근육 정밀도",
+  time_pressure: "시간 압박",
+  reading_load: "읽기 부담",
+  single_modality_communication: "단일 응답 방식",
+  sensory_color_only: "색상 단독 단서",
+  sensory_audio_only: "소리 단독 단서",
+  navigation_ambiguity: "불명확한 탐색",
+};
+
 export function BarrierTrace({ assignmentText, step, friction, citation }: BarrierTraceProps) {
   const { goTo, applyRepair } = useWorkflow();
-  const category = friction.barrierType.replaceAll("_", " ");
+  const category = BARRIER_CATEGORY_LABEL[friction.barrierType] ?? friction.barrierType.replaceAll("_", " ");
   return (
     <main className="workflow-main">
-      <ScreenHeading eyebrow="Friction" title="Barrier Trace" subtitle="Identify what’s getting in the way—and why." />
+      <ScreenHeading eyebrow="어려움" title="어려움 살펴보기" subtitle="학생이 어디에서 막히는지, 그리고 왜 막히는지 확인하세요." />
       <div className="barrier-grid">
         <section className="excerpt-panel" aria-labelledby="excerpt-title">
           <div className="document-masthead">
             <div><span className="paper-dot" aria-hidden="true" /><span className="paper-dot" aria-hidden="true" /><span className="paper-dot" aria-hidden="true" /></div>
-            <p id="excerpt-title">Assignment excerpt</p>
+            <p id="excerpt-title">과제 원문</p>
           </div>
           <HighlightedEvidence assignmentText={assignmentText} evidence={step.evidence} />
         </section>
         <article className="barrier-detail">
           <div className="barrier-meta">
             <span>{category}</span>
-            <strong className={`severity-text severity-${friction.severity}`}>{SEVERITY_LABEL[friction.severity]} severity</strong>
+            <strong className={`severity-text severity-${friction.severity}`}>심각도 {SEVERITY_LABEL[friction.severity]}</strong>
           </div>
           <h2>{friction.title}</h2>
           <dl>
-            <div><dt>Why it was flagged</dt><dd>{friction.explanation}</dd></div>
-            <div><dt>Why it matters</dt><dd>{step.relevanceReason}</dd></div>
-            <div><dt>Goal relevance</dt><dd className="goal-relevance-value">{RELEVANCE_LABEL[step.goalRelevance]}</dd></div>
-            <div><dt>Suggested repair</dt><dd>{step.repair?.suggestion ?? "Review this step with the learner journey in view."}</dd></div>
+            <div><dt>발견된 이유</dt><dd>{friction.explanation}</dd></div>
+            <div><dt>중요한 이유</dt><dd>{step.relevanceReason}</dd></div>
+            <div><dt>목표와의 관련성</dt><dd className="goal-relevance-value">{RELEVANCE_LABEL[step.goalRelevance]}</dd></div>
+            <div><dt>개선 제안</dt><dd>{step.repair?.suggestion ?? "과제 분석 화면에서 이 단계를 다시 검토해보세요."}</dd></div>
           </dl>
           <p className="citation"><BookOpen size={15} aria-hidden="true" /> {citation}</p>
           <div className="barrier-actions">
-            <button type="button" className="button button--secondary" onClick={() => goTo("journey")}><ArrowLeft size={16} aria-hidden="true" /> Back to journey</button>
-            <button type="button" className="button button--primary" onClick={() => { applyRepair(step.id); goTo("repair"); }}><Check size={16} aria-hidden="true" /> Apply repair</button>
-            <button type="button" className="button button--secondary" onClick={() => goTo("preview")}>View student preview <ChevronRight size={16} aria-hidden="true" /></button>
+            <button type="button" className="button button--secondary" onClick={() => goTo("journey")}><ArrowLeft size={16} aria-hidden="true" /> 과제 분석으로 돌아가기</button>
+            <button type="button" className="button button--primary" onClick={() => { applyRepair(step.id); goTo("repair"); }}><Check size={16} aria-hidden="true" /> 개선안 적용</button>
+            <button type="button" className="button button--secondary" onClick={() => goTo("preview")}>과제 개선안 미리보기 <ChevronRight size={16} aria-hidden="true" /></button>
           </div>
         </article>
       </div>
@@ -602,24 +594,24 @@ export interface RepairScreenProps {
 
 function effectLabels(effects: RepairEffects): string[] {
   const labels: string[] = [];
-  if (effects.keepsInfoVisible) labels.push("Keeps information visible");
-  if (effects.reducesWorkingMemory) labels.push("Lowers memory demand");
-  if (effects.reducesFineMotor) labels.push("Lowers motor precision");
-  if (effects.reducesReadingLoad) labels.push("Lowers reading load");
-  if (effects.addsNonColorCue) labels.push("Adds a non-color cue");
-  if (effects.addsCaptionOrTranscript) labels.push("Adds captions or transcript");
-  if (effects.addsResponseAlternative) labels.push("Adds response choices");
+  if (effects.keepsInfoVisible) labels.push("정보를 계속 화면에 표시");
+  if (effects.reducesWorkingMemory) labels.push("기억 부담 감소");
+  if (effects.reducesFineMotor) labels.push("소근육 정밀도 부담 감소");
+  if (effects.reducesReadingLoad) labels.push("읽기 부담 감소");
+  if (effects.addsNonColorCue) labels.push("색상 외 단서 추가");
+  if (effects.addsCaptionOrTranscript) labels.push("자막 또는 스크립트 추가");
+  if (effects.addsResponseAlternative) labels.push("응답 방식 선택지 추가");
   if (effects.replacementEnvironment) {
-    labels.push(`Moves step to ${effects.replacementEnvironment}`);
+    labels.push(`${effects.replacementEnvironment}(으)로 단계 이동`);
   }
   for (const change of timeConstraintChangesOf(effects)) {
     labels.push(
       change.action === "remove"
-        ? `Removes timer ${change.constraintId}`
-        : `Sets timer ${change.constraintId} to ${change.limitMinutes} min`,
+        ? `타이머 ${change.constraintId} 제거`
+        : `타이머 ${change.constraintId}를 ${change.limitMinutes}분으로 설정`,
     );
   }
-  return labels.length > 0 ? labels : ["No deterministic measurement changes"];
+  return labels.length > 0 ? labels : ["측정되는 변화 없음"];
 }
 
 export function RepairScreen({ steps, appliedRepairIds, onApply, onKeep, onCustomize }: RepairScreenProps) {
@@ -648,7 +640,7 @@ export function RepairScreen({ steps, appliedRepairIds, onApply, onKeep, onCusto
   async function saveCustomize(stepId: string) {
     const suggestion = draft.trim();
     if (!suggestion) {
-      setCustomError("Write a complete repair before saving.");
+      setCustomError("저장하기 전에 개선안 전체 내용을 작성해주세요.");
       return;
     }
     setSavingId(stepId);
@@ -659,7 +651,7 @@ export function RepairScreen({ steps, appliedRepairIds, onApply, onKeep, onCusto
       setEditingId(null);
     } catch (error) {
       setCustomError(
-        error instanceof Error ? error.message : "Could not validate that repair. Try again.",
+        error instanceof Error ? error.message : "개선안을 검증할 수 없습니다. 다시 시도해주세요.",
       );
     } finally {
       setSavingId(null);
@@ -671,7 +663,7 @@ export function RepairScreen({ steps, appliedRepairIds, onApply, onKeep, onCusto
 
   return (
     <main className="workflow-main repair-screen">
-      <ScreenHeading eyebrow="Repair" title="Repair Plan" subtitle="Review targeted accessibility improvements while preserving the learning goal." />
+      <ScreenHeading eyebrow="개선" title="개선 계획" subtitle="학습 목표를 지키면서 제안된 접근성 개선안을 검토하세요." />
       <div className="repair-list">
         {repairSteps.map((step, index) => {
           const decision = decisions[step.id];
@@ -683,46 +675,46 @@ export function RepairScreen({ steps, appliedRepairIds, onApply, onKeep, onCusto
               <div className="repair-body">
                 <div className="repair-title-row">
                   <h2>{step.repair!.barrierReduced}</h2>
-                  <span className={`severity-text severity-${highDemand ? "high" : "medium"}`}>{highDemand ? "High" : "Moderate"}</span>
+                  <span className={`severity-text severity-${highDemand ? "high" : "medium"}`}>{highDemand ? "높음" : "보통"}</span>
                 </div>
                 <div className="repair-comparison">
-                  <div><p>Current</p><span>{step.evidence}</span></div>
+                  <div><p>현재</p><span>{step.evidence}</span></div>
                   <ArrowRight size={18} aria-hidden="true" />
-                  <div><p>Recommended</p><span>{step.repair!.suggestion}</span></div>
+                  <div><p>제안</p><span>{step.repair!.suggestion}</span></div>
                 </div>
-                <ul className="repair-effect-list" aria-label="Measured effects">
+                <ul className="repair-effect-list" aria-label="측정된 효과">
                   {effectLabels(step.repair!.effects).map((effect) => <li key={effect}>{effect}</li>)}
                 </ul>
                 {editingId === step.id && (
                   <div className="customize-field">
-                    <label htmlFor={`custom-${step.id}`}>Customize the recommendation</label>
+                    <label htmlFor={`custom-${step.id}`}>제안 직접 수정하기</label>
                     <textarea id={`custom-${step.id}`} value={draft} onChange={(event) => setDraft(event.target.value)} autoFocus />
-                    <p>The new wording will be reclassified before it can affect measurements.</p>
+                    <p>새로 작성한 내용은 측정치에 반영되기 전에 다시 분류됩니다.</p>
                     {customError && <p role="alert" className="customize-error">{customError}</p>}
                     <button type="button" className="button button--small button--primary" onClick={() => saveCustomize(step.id)} disabled={savingId === step.id || draft.trim().length === 0}>
-                      {savingId === step.id ? "Validating…" : "Save & apply"}
+                      {savingId === step.id ? "검증 중…" : "저장 및 적용"}
                     </button>
                   </div>
                 )}
                 <div className="rigor-note">
                   <CheckCircle2 size={16} aria-hidden="true" />
-                  <p><strong>Rigor {step.repair!.rigorPreserved ? "preserved" : "needs review"}</strong><span>{step.repair!.rigorNote}</span></p>
+                  <p><strong>난이도 {step.repair!.rigorPreserved ? "유지됨" : "검토 필요"}</strong><span>{step.repair!.rigorNote}</span></p>
                 </div>
-                <div className="repair-row-actions" aria-label={`Decision for ${step.repair!.barrierReduced}`}>
-                  <button type="button" className={decision === "apply" ? "is-selected" : ""} onClick={() => choose(step.id, "apply")}><Check size={14} aria-hidden="true" /> Apply</button>
-                  <button type="button" onClick={() => beginCustomize(step)}><Pencil size={14} aria-hidden="true" /> Customize</button>
-                  <button type="button" className={decision === "keep" ? "is-selected" : ""} onClick={() => choose(step.id, "keep")}>Keep current</button>
+                <div className="repair-row-actions" aria-label={`${step.repair!.barrierReduced}에 대한 결정`}>
+                  <button type="button" className={decision === "apply" ? "is-selected" : ""} onClick={() => choose(step.id, "apply")}><Check size={14} aria-hidden="true" /> 적용</button>
+                  <button type="button" onClick={() => beginCustomize(step)}><Pencil size={14} aria-hidden="true" /> 직접 수정</button>
+                  <button type="button" className={decision === "keep" ? "is-selected" : ""} onClick={() => choose(step.id, "keep")}>현재 상태 유지</button>
                 </div>
-                {demands.length > 0 && <p className="repair-demand-note">Detected from {demands.map((demand) => demand.label).join(", ")}.</p>}
+                {demands.length > 0 && <p className="repair-demand-note">{demands.map((demand) => demand.label).join(", ")}에서 감지됨.</p>}
               </div>
             </article>
           );
         })}
       </div>
       <div className="sticky-action-bar">
-        <p><strong>{reviewed}</strong> of {repairSteps.length} barriers reviewed <span aria-hidden="true">·</span> <strong>{ready}</strong> repairs ready</p>
-        <button type="button" className="button button--secondary" onClick={() => goTo("barrier")}><ArrowLeft size={16} aria-hidden="true" /> Back to friction</button>
-        <ArrowButton onClick={() => goTo("constraint")} disabled={reviewed === 0}>Continue to testing</ArrowButton>
+        <p>어려움 {repairSteps.length}개 중 <strong>{reviewed}</strong>개 검토함 <span aria-hidden="true">·</span> 개선안 <strong>{ready}</strong>개 준비됨</p>
+        <button type="button" className="button button--secondary" onClick={() => goTo("barrier")}><ArrowLeft size={16} aria-hidden="true" /> 어려움으로 돌아가기</button>
+        <ArrowButton onClick={() => goTo("constraint")} disabled={reviewed === 0}>테스트로 계속하기</ArrowButton>
       </div>
     </main>
   );
@@ -754,7 +746,7 @@ interface ConditionDefinition {
 export const CONDITIONS: ConditionDefinition[] = [
   {
     id: "working_memory",
-    label: "Reduced working-memory dependency",
+    label: "작업 기억 의존도 완화",
     icon: CircleGauge,
     // Measured by the liveness pass, not by the step's own rating.
     //
@@ -774,20 +766,20 @@ export const CONDITIONS: ConditionDefinition[] = [
   // question, so reusing that answer here would be a guess wearing a label.
   {
     id: "keyboard_only",
-    label: "Keyboard-only",
+    label: "키보드만 사용",
     icon: Keyboard,
     fails: () => false,
     unavailable: true,
     unavailableReason:
-      "Whether each step can be completed without a mouse depends on the software behind it, which the assignment text does not describe. Motor precision is measured separately under “Limited motor precision”.",
+      "각 단계를 마우스 없이 완료할 수 있는지는 그 소프트웨어의 동작 방식에 달려 있으며, 과제 지문만으로는 알 수 없습니다. 소근육 정밀도는 “제한된 소근육 정밀도” 항목에서 별도로 측정됩니다.",
   },
-  { id: "fine_motor", label: "Limited motor precision", icon: MousePointer2, fails: (step) => step.demands.fineMotor >= 2 },
-  { id: "no_spoken", label: "No spoken response", icon: Mic, fails: (step) => step.demands.communication === "spoken" },
-  { id: "no_audio", label: "No audio", icon: Volume2, fails: (step) => step.demands.sensory.audioOnly },
-  { id: "no_color", label: "No color information", icon: Sparkles, fails: (step) => step.demands.sensory.colorOnly },
+  { id: "fine_motor", label: "제한된 소근육 정밀도", icon: MousePointer2, fails: (step) => step.demands.fineMotor >= 2 },
+  { id: "no_spoken", label: "말하기 응답 불가", icon: Mic, fails: (step) => step.demands.communication === "spoken" },
+  { id: "no_audio", label: "소리 없이", icon: Volume2, fails: (step) => step.demands.sensory.audioOnly },
+  { id: "no_color", label: "색상 정보 없이", icon: Sparkles, fails: (step) => step.demands.sensory.colorOnly },
   {
     id: "processing_time",
-    label: "Additional processing time",
+    label: "추가 처리 시간 필요",
     icon: Clock3,
     // A step fails when a timer the assignment actually states is running
     // during it. A step rated pressured with no stated clock is the model's
@@ -797,12 +789,12 @@ export const CONDITIONS: ConditionDefinition[] = [
   },
   {
     id: "reduced_motion",
-    label: "Reduced motion",
+    label: "움직임 최소화",
     icon: RotateCcw,
     fails: () => false,
     unavailable: true,
     unavailableReason:
-      "The demand schema does not describe motion or animation, so AccessLens will not invent a result.",
+      "부담 스키마는 움직임이나 애니메이션을 다루지 않으므로, Homework evaluator는 결과를 임의로 만들어내지 않습니다.",
   },
 ];
 
@@ -865,15 +857,15 @@ export function ConstraintTest({ analysis, repairedAnalysis, report, repairedRep
 
   return (
     <main className="workflow-main constraint-screen">
-      <ScreenHeading eyebrow="Test" title="Test access conditions" subtitle="See where the assignment breaks under different functional access conditions." />
+      <ScreenHeading eyebrow="검증" title="접근성 조건 테스트하기" subtitle="다양한 기능적 접근 조건에서 과제가 어디서 막히는지 확인하세요." />
       <div className="constraint-grid">
         <aside className="condition-list" aria-labelledby="conditions-title">
-          <h2 id="conditions-title">Functional conditions</h2>
+          <h2 id="conditions-title">기능적 조건</h2>
           {CONDITIONS.map((item) => {
             const Icon = item.icon;
             return (
               <button key={item.id} type="button" onClick={() => selectCondition(item.id)} className={item.id === selected.id ? "is-selected" : ""} aria-pressed={item.id === selected.id}>
-                <Icon size={16} aria-hidden="true" /><span>{item.label}</span>{item.unavailable && <small>Data unavailable</small>}
+                <Icon size={16} aria-hidden="true" /><span>{item.label}</span>{item.unavailable && <small>데이터 없음</small>}
               </button>
             );
           })}
@@ -881,17 +873,17 @@ export function ConstraintTest({ analysis, repairedAnalysis, report, repairedRep
 
         <section className="journey-results" aria-labelledby="results-title">
           <div className="result-heading">
-            <div><p className="eyebrow">Journey results</p><h2 id="results-title">{selected.label}</h2></div>
+            <div><p className="eyebrow">과제 결과</p><h2 id="results-title">{selected.label}</h2></div>
             {!unavailable && (
               <span>
                 {fixedCount > 0
-                  ? `${stillFailing.length} of ${analysis.steps.length} steps fail — ${fixedCount} fixed by your repairs`
-                  : `${failedSteps.length} of ${analysis.steps.length} steps fail`}
+                  ? `전체 ${analysis.steps.length}단계 중 ${stillFailing.length}단계 실패 — 개선안으로 ${fixedCount}단계 해결됨`
+                  : `전체 ${analysis.steps.length}단계 중 ${failedSteps.length}단계 실패`}
               </span>
             )}
           </div>
           {unavailable ? (
-            <div className="unavailable-state"><selected.icon size={24} aria-hidden="true" /><h3>Not represented in task data</h3><p>{selected.unavailableReason}</p></div>
+            <div className="unavailable-state"><selected.icon size={24} aria-hidden="true" /><h3>과제 데이터에 나타나지 않음</h3><p>{selected.unavailableReason}</p></div>
           ) : (
             <ol className="test-steps">
               {analysis.steps.map((step, index) => {
@@ -904,10 +896,10 @@ export function ConstraintTest({ analysis, repairedAnalysis, report, repairedRep
                     <p>{step.action}</p>
                     {fixed ? (
                       <strong className="result-fixed">
-                        <s>FAIL</s> PASS after repair
+                        <s>실패</s> 개선 후 통과
                       </strong>
                     ) : (
-                      <strong className={fails ? "result-fail" : "result-pass"}>{fails ? "FAIL" : "PASS"}</strong>
+                      <strong className={fails ? "result-fail" : "result-pass"}>{fails ? "실패" : "통과"}</strong>
                     )}
                   </li>
                 );
@@ -916,30 +908,30 @@ export function ConstraintTest({ analysis, repairedAnalysis, report, repairedRep
           )}
           {!unavailable && stillFailing.length > 0 && (
             <article className="failure-explanation">
-              <p className="eyebrow">Why this fails</p>
+              <p className="eyebrow">실패하는 이유</p>
               <h3>{focusedStep.action}</h3>
               <p>{focusedStep.relevanceReason}</p>
               {focusedFixed && focusedStep.repair ? (
                 <span>
-                  <CheckCircle2 size={15} aria-hidden="true" /> Your accepted repair clears this condition at this step
+                  <CheckCircle2 size={15} aria-hidden="true" /> 채택한 개선안으로 이 단계의 이 조건이 해결됩니다
                 </span>
-              ) : <span>No accepted repair changes this condition at this step.</span>}
+              ) : <span>채택된 개선안 중 이 단계의 이 조건을 바꾸는 것은 없습니다.</span>}
             </article>
           )}
         </section>
 
         <aside className="condition-preview" aria-labelledby="preview-title">
-          <p className="eyebrow">Student preview</p>
+          <p className="eyebrow">과제 개선안 미리보기</p>
           <h2 id="preview-title">{focusedStep.action}</h2>
           {focusedFixed && focusedStep.repair ? (
-            <><div className="preview-results"><p>Your task support</p><strong>{focusedStep.repair.suggestion}</strong></div><p className="preview-assurance"><Check size={14} aria-hidden="true" /> Reference remains available while working.</p></>
+            <><div className="preview-results"><p>과제 지원 내용</p><strong>{focusedStep.repair.suggestion}</strong></div><p className="preview-assurance"><Check size={14} aria-hidden="true" /> 작업 중에도 참고 자료가 계속 제공됩니다.</p></>
           ) : (
-            <p className="preview-empty">No change is suggested for this step under the selected condition.</p>
+            <p className="preview-empty">선택한 조건에서는 이 단계에 제안된 변경 사항이 없습니다.</p>
           )}
-          <dl className="compact-metrics"><div><dt>Task environments</dt><dd>{report.switching.uniqueEnvironments.length}{repairedReport.switching.uniqueEnvironments.length !== report.switching.uniqueEnvironments.length ? ` → ${repairedReport.switching.uniqueEnvironments.length}` : ""}</dd></div><div><dt>Active timers</dt><dd>{report.timing.constraints.length || "None"}{repairedReport.timing.constraints.length !== report.timing.constraints.length ? ` → ${repairedReport.timing.constraints.length || "None"}` : ""}</dd></div></dl>
+          <dl className="compact-metrics"><div><dt>과제 환경 수</dt><dd>{report.switching.uniqueEnvironments.length}{repairedReport.switching.uniqueEnvironments.length !== report.switching.uniqueEnvironments.length ? ` → ${repairedReport.switching.uniqueEnvironments.length}` : ""}</dd></div><div><dt>활성 타이머</dt><dd>{report.timing.constraints.length || "없음"}{repairedReport.timing.constraints.length !== report.timing.constraints.length ? ` → ${repairedReport.timing.constraints.length || "없음"}` : ""}</dd></div></dl>
         </aside>
       </div>
-      <div className="screen-footer-actions"><button type="button" className="button button--secondary" onClick={() => goTo("repair")}><ArrowLeft size={16} aria-hidden="true" /> Back to repairs</button><button type="button" className="button button--secondary" onClick={() => selectCondition(CONDITIONS[0].id)}>Run another test</button><ArrowButton onClick={() => goTo("preview")}>Continue</ArrowButton></div>
+      <div className="screen-footer-actions"><button type="button" className="button button--secondary" onClick={() => goTo("repair")}><ArrowLeft size={16} aria-hidden="true" /> 개선안으로 돌아가기</button><button type="button" className="button button--secondary" onClick={() => selectCondition(CONDITIONS[0].id)}>다른 조건 테스트하기</button><ArrowButton onClick={() => goTo("preview")}>계속하기</ArrowButton></div>
     </main>
   );
 }
@@ -954,6 +946,8 @@ export interface StudentPreviewProps {
   revisionKey: string;
   existingRevision: RevisedAssignment | null;
   onRevised: (revisionKey: string, revised: RevisedAssignment) => void;
+  /** The finished student handout, once a revision exists. */
+  handoutHtml: string | null;
 }
 
 interface AccessTool {
@@ -966,14 +960,26 @@ interface AccessTool {
 }
 
 const ACCESS_TOOLS: AccessTool[] = [
-  { id: "spacing", label: "Increase spacing", hint: "Wider line and letter spacing", live: true },
-  { id: "declutter", label: "Reduce visual clutter", hint: "Show only the revised assignment", live: true },
-  { id: "readAloud", label: "Read aloud", hint: "Speak the revised assignment", live: true },
-  { id: "chunk", label: "Chunk instructions", hint: "One step at a time", live: false },
-  { id: "highlight", label: "Highlight current step", hint: "Dim everything else", live: false },
+  { id: "spacing", label: "간격 넓히기", hint: "줄 간격과 자간을 넓힙니다", live: true },
+  { id: "declutter", label: "시각적 요소 줄이기", hint: "수정된 과제만 표시합니다", live: true },
+  { id: "readAloud", label: "소리 내어 읽기", hint: "수정된 과제를 음성으로 읽어줍니다", live: true },
+  { id: "chunk", label: "지시문 나누기", hint: "한 번에 한 단계씩", live: false },
+  { id: "highlight", label: "현재 단계 강조", hint: "나머지는 흐리게 표시", live: false },
 ];
 
-export function StudentPreview({ objective, steps, appliedRepairIds, assignmentText, revisionKey, existingRevision, onRevised }: StudentPreviewProps) {
+/** Wraps the changed words in <mark>; falls back to plain text when no comparison is available. */
+function renderDiff(segments: DiffSegment[] | undefined, fallback: string, kind: "added" | "removed") {
+  if (!segments) return fallback;
+  return segments.map((segment, index) =>
+    segment.changed ? (
+      <mark key={index} className={`revision-${kind}`}>{segment.text}</mark>
+    ) : (
+      <span key={index}>{segment.text}</span>
+    ),
+  );
+}
+
+export function StudentPreview({ objective, steps, appliedRepairIds, assignmentText, revisionKey, existingRevision, onRevised, handoutHtml }: StudentPreviewProps) {
   const { goTo } = useWorkflow();
   const [tools, setTools] = useState<Record<string, boolean>>({ spacing: false, declutter: false, readAloud: false });
   // Held against the inputs it was generated from. Changing a repair decision
@@ -997,10 +1003,15 @@ export function StudentPreview({ objective, steps, appliedRepairIds, assignmentT
     [steps, appliedRepairIds],
   );
 
+  const previewSteps = useMemo(
+    () => steps.map((step) => ({ id: step.id, action: step.action })),
+    [steps],
+  );
+
   useEffect(() => {
     if (accepted.length === 0 || revised !== null) return;
     let cancelled = false;
-    generatePreview(assignmentText, objective, accepted)
+    generatePreview(assignmentText, objective, accepted, previewSteps)
       .then((value) => {
         if (cancelled) return;
         setResult({ key: revisionKey, value });
@@ -1010,13 +1021,17 @@ export function StudentPreview({ objective, steps, appliedRepairIds, assignmentT
         if (cancelled) return;
         setFailure({
           key: revisionKey,
-          message: error instanceof Error ? error.message : "Could not rewrite the assignment.",
+          message: error instanceof Error ? error.message : "과제를 다시 작성할 수 없습니다.",
         });
       });
     return () => { cancelled = true; };
-  }, [assignmentText, objective, accepted, revisionKey, revised, onRevised, retryNonce]);
+  }, [assignmentText, objective, accepted, previewSteps, revisionKey, revised, onRevised, retryNonce]);
 
   const loading = accepted.length > 0 && revised === null && message === "";
+  const diff = useMemo(
+    () => (revised ? diffWords(assignmentText, revised.revisedText) : null),
+    [assignmentText, revised],
+  );
 
   function retryRewrite() {
     setFailure(null);
@@ -1041,55 +1056,61 @@ export function StudentPreview({ objective, steps, appliedRepairIds, assignmentT
 
   return (
     <main className="workflow-main student-preview-screen">
-      <ScreenHeading eyebrow="Preview" title="Student Preview" subtitle="A calmer path through the same academic work." />
+      <ScreenHeading eyebrow="미리보기" title="과제 개선안 미리보기" subtitle="같은 과제를 더 쉽게" />
 
       <section
         className={`revision-compare${tools.spacing ? " is-spaced" : ""}${tools.declutter ? " is-decluttered" : ""}`}
-        aria-label="Original and revised assignment"
+        aria-label="원본 및 수정된 과제"
       >
         <article className="student-assignment">
-          <header><p>Original</p><span>As students receive it today</span></header>
-          <section className="student-goal"><p className="eyebrow">Your goal</p><h2>{objective}</h2></section>
-          <pre className="assignment-body">{assignmentText}</pre>
+          <header><p>원본</p><span>현재 학생들이 받는 과제</span></header>
+          <section className="student-goal"><p className="eyebrow">학습 목표</p><h2>{objective}</h2></section>
+          <pre className="assignment-body">{renderDiff(diff?.original, assignmentText, "removed")}</pre>
         </article>
 
         <article className="student-assignment student-assignment--revised">
           <header>
-            <p>Revised</p>
-            <span>{revised ? revised.title : "With the repairs you accepted"}</span>
+            <p>수정본</p>
+            <span>{revised ? revised.title : "채택한 개선안이 반영된 버전"}</span>
           </header>
-          <section className="student-goal"><p className="eyebrow">Your goal</p><h2>{objective}</h2></section>
+          <section className="student-goal"><p className="eyebrow">학습 목표</p><h2>{objective}</h2></section>
 
           {accepted.length === 0 && (
             <p className="revision-empty">
-              No repairs accepted yet. Go back to the repair plan and apply one, and the
-              rewritten assignment appears here.
+              아직 채택된 개선안이 없습니다. 개선 계획 화면으로 돌아가 개선안을 적용하면
+              여기에 수정된 과제가 나타납니다.
             </p>
           )}
 
           {loading && (
             <p className="revision-empty" aria-live="polite">
-              <Sparkles size={15} aria-hidden="true" /> Rewriting the assignment with your{" "}
-              {accepted.length} accepted {accepted.length === 1 ? "repair" : "repairs"}…
+              <Sparkles size={15} aria-hidden="true" /> 채택한 개선안 {accepted.length}개를 반영해
+              과제를 다시 작성하는 중…
             </p>
           )}
 
           {message !== "" && (
             <div className="revision-empty revision-empty--error" role="alert">
               <p>{message}</p>
-              <button type="button" className="button button--small button--secondary" onClick={retryRewrite}>Retry rewrite</button>
+              <button type="button" className="button button--small button--secondary" onClick={retryRewrite}>다시 시도</button>
             </div>
           )}
 
+          {revised && diff && (
+            <p className="revision-legend">
+              <mark className="revision-added">표시된 부분</mark>이 원본에서 바뀐 내용입니다.
+            </p>
+          )}
+
           {revised && (
-            <pre className="assignment-body">{revised.revisedText}</pre>
+            <pre className="assignment-body">{renderDiff(diff?.revised, revised.revisedText, "added")}</pre>
           )}
         </article>
       </section>
 
       {revised && revised.changes.length > 0 && (
         <section className={`revision-changes${tools.declutter ? " is-hidden" : ""}`} aria-labelledby="changes-title">
-          <h2 id="changes-title">What changed, and why</h2>
+          <h2 id="changes-title">무엇이, 왜 바뀌었는가</h2>
           <ol>
             {revised.changes.map((change) => (
               <li key={change.what}>
@@ -1101,10 +1122,20 @@ export function StudentPreview({ objective, steps, appliedRepairIds, assignmentT
         </section>
       )}
 
+      {handoutHtml && (
+        <section className="handout-preview" aria-labelledby="handout-title">
+          <header>
+            <h2 id="handout-title">학생용 화면 미리보기</h2>
+            <p>학생이 내려받을 HTML 파일과 똑같은 화면입니다. 단계를 눌러 선행·후행 행동이 맞는지 확인해 보세요.</p>
+          </header>
+          <iframe title="학생용 HTML 미리보기" srcDoc={handoutHtml} sandbox="allow-scripts" />
+        </section>
+      )}
+
       <div className="student-layout">
         <aside className="access-tools" aria-labelledby="tools-title">
-          <h2 id="tools-title">Access tools</h2>
-          <p>Personalize how the assignment is presented.</p>
+          <h2 id="tools-title">접근성 도구</h2>
+          <p>과제가 표시되는 방식을 개인화하세요.</p>
           <div>
             {ACCESS_TOOLS.map((tool) => (
               <label key={tool.id} className={tool.live ? "" : "is-roadmap"}>
@@ -1124,7 +1155,7 @@ export function StudentPreview({ objective, steps, appliedRepairIds, assignmentT
                     <i aria-hidden="true" />
                   </>
                 ) : (
-                  <em>Roadmap</em>
+                  <em>준비 중</em>
                 )}
               </label>
             ))}
@@ -1132,12 +1163,12 @@ export function StudentPreview({ objective, steps, appliedRepairIds, assignmentT
         </aside>
       </div>
       <div className="screen-footer-actions">
-        <button type="button" className="button button--secondary" onClick={() => goTo("repair")}><ArrowLeft size={16} aria-hidden="true" /> Back to repairs</button>
+        <button type="button" className="button button--secondary" onClick={() => goTo("repair")}><ArrowLeft size={16} aria-hidden="true" /> 개선안으로 돌아가기</button>
         {message !== "" ? (
-          <button type="button" className="button button--secondary" onClick={() => goTo("complete")}>Finish analysis without revised assignment</button>
+          <button type="button" className="button button--secondary" onClick={() => goTo("complete")}>수정된 과제 없이 분석 마치기</button>
         ) : (
           <ArrowButton onClick={() => goTo("complete")} disabled={loading}>
-            {loading ? "Waiting for the rewrite…" : "Finish analysis"}
+            {loading ? "다시 작성되기를 기다리는 중…" : "분석 마치기"}
           </ArrowButton>
         )}
       </div>
@@ -1155,48 +1186,40 @@ export interface CompleteScreenProps {
   goalPreserved: boolean;
   onExport: () => void;
   canExport: boolean;
-  scoreBefore: number;
-  scoreAfter: number;
 }
 
-export function CompleteScreen({ frictionCount, frictionResolved, frictionUnverified, repairsApplied, goalPreserved, onExport, canExport, scoreBefore, scoreAfter }: CompleteScreenProps) {
+export function CompleteScreen({ frictionCount, frictionResolved, frictionUnverified, repairsApplied, goalPreserved, onExport, canExport }: CompleteScreenProps) {
   const { startOver } = useWorkflow();
   const unresolved = frictionCount - frictionResolved - frictionUnverified;
-  const remainingSummary = `${unresolved} friction ${unresolved === 1 ? "moment is" : "moments are"} still present${frictionUnverified > 0 ? `, and ${frictionUnverified} ${frictionUnverified === 1 ? "outcome could not be verified" : "outcomes could not be verified"} from the task data` : ""}.`;
+  const remainingSummary = `아직 해결되지 않은 어려움이 ${unresolved}개 남아 있습니다${frictionUnverified > 0 ? `. 그리고 과제 데이터로는 결과를 확인할 수 없는 항목이 ${frictionUnverified}개 있습니다` : ""}.`;
   return (
     <main className="complete-screen">
       <div className="complete-mark" aria-hidden="true"><span /><span /><span /></div>
-      <p className="eyebrow">Analysis complete</p>
-      <h1 data-screen-heading tabIndex={-1}>{canExport ? "Your revised task is ready." : "Your analysis is complete."}</h1>
+      <p className="eyebrow">분석 완료</p>
+      <h1 data-screen-heading tabIndex={-1}>{canExport ? "수정된 과제가 준비되었습니다." : "분석이 완료되었습니다."}</h1>
       <p className="complete-intro">
         {!canExport
-          ? "The task was measured and your accepted repair decisions were recorded. No revised assignment was generated, so export is unavailable."
+          ? "과제가 측정되었고, 채택한 개선 결정이 기록되었습니다. 수정된 과제가 생성되지 않아 내보내기는 사용할 수 없습니다."
           : frictionResolved === frictionCount
-          ? "Every friction moment AccessLens detected is resolved in the revised task, and the learning goal is unchanged."
-          : `The repairs you accepted were applied and the task was measured again. ${remainingSummary}`}
+          ? "Homework evaluator가 발견한 모든 어려움이 수정된 과제에서 해결되었으며, 학습 목표는 변하지 않았습니다."
+          : `채택한 개선안이 적용되어 과제가 다시 측정되었습니다. ${remainingSummary}`}
       </p>
       <div className="completion-facts">
-        <p><CheckCircle2 size={18} aria-hidden="true" /><span>Learning goal {goalPreserved ? "preserved" : "needs review"}</span></p>
-        <p><span>{frictionResolved}<em> / </em>{frictionCount}</span><small>friction moments resolved</small></p>
-        {frictionUnverified > 0 && <p><span>{frictionUnverified}</span><small>outcomes unverified</small></p>}
-        <p><span>{repairsApplied}</span><small>repairs applied</small></p>
-        {scoreAfter > scoreBefore && (
-          <p className="complete-delta">
-            <span>{scoreBefore}<em> → </em>{scoreAfter}</span>
-            <small>task accessibility confidence, recomputed</small>
-          </p>
-        )}
+        <p><CheckCircle2 size={18} aria-hidden="true" /><span>학습 목표 {goalPreserved ? "유지됨" : "검토 필요"}</span></p>
+        <p><span>{frictionResolved}<em> / </em>{frictionCount}</span><small>어려움 해결됨</small></p>
+        {frictionUnverified > 0 && <p><span>{frictionUnverified}</span><small>결과 확인 불가</small></p>}
+        <p><span>{repairsApplied}</span><small>개선안 적용됨</small></p>
       </div>
       <div className="complete-actions">
         <button type="button" className="button button--primary" onClick={onExport} disabled={!canExport}>
-          Export revised assignment <ArrowRight size={16} aria-hidden="true" />
+          학생용 HTML 내려받기 <ArrowRight size={16} aria-hidden="true" />
         </button>
-        <button type="button" className="button button--secondary" onClick={startOver}>Start another analysis</button>
+        <button type="button" className="button button--secondary" onClick={startOver}>새 분석 시작하기</button>
       </div>
       {!canExport && (
-        <p className="export-hint">No revised assignment is available. Return to the student preview and retry the rewrite to enable export.</p>
+        <p className="export-hint">수정된 과제를 사용할 수 없습니다. 과제 개선안 미리보기로 돌아가 다시 작성을 시도하면 내보내기를 사용할 수 있습니다.</p>
       )}
-      <p className="educator-note">AccessLens identifies potential task-level accessibility barriers. Educator judgment remains part of every decision.</p>
+      <p className="educator-note">Homework evaluator는 과제 수준에서 발생할 수 있는 접근성 장벽을 식별합니다. 최종 판단은 언제나 교사의 몫입니다.</p>
     </main>
   );
 }

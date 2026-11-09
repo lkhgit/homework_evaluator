@@ -16,24 +16,24 @@ const instrumentSerif = Instrument_Serif({
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"),
-  title: "AccessLens — We test the task",
-  description: "Accessibility preflight for digital learning tasks.",
+  title: "Homework evaluator — 과제 자체를 검사합니다",
+  description: "디지털 학습 과제를 위한 접근성 사전 점검 도구.",
   openGraph: {
-    title: "AccessLens — We test the task",
-    description: "We don’t just test the page. We test the task.",
-    images: [{ url: "/og.png", width: 1672, height: 941, alt: "AccessLens — We don’t just test the page. We test the task." }],
+    title: "Homework evaluator — 과제 자체를 검사합니다",
+    description: "페이지만 검사하지 않습니다. 과제 자체를 검사합니다.",
+    images: [{ url: "/og.png", width: 1672, height: 941, alt: "Homework evaluator — 페이지만 검사하지 않습니다. 과제 자체를 검사합니다." }],
   },
   twitter: {
     card: "summary_large_image",
-    title: "AccessLens — We test the task",
-    description: "Accessibility preflight for digital learning",
+    title: "Homework evaluator — 과제 자체를 검사합니다",
+    description: "디지털 학습을 위한 접근성 사전 점검",
     images: ["/og.png"],
   },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={`${geist.variable} ${instrumentSerif.variable}`}>
+    <html lang="ko" className={`${geist.variable} ${instrumentSerif.variable}`}>
       <body>{children}</body>
     </html>
   );

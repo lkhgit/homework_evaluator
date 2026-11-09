@@ -23,7 +23,7 @@ test("a caller is allowed up to the per-caller limit, then blocked", () => {
   const blocked = checkRateLimit(request(ip), scope, LIMIT);
   assert.equal(blocked.allowed, false);
   assert.ok(blocked.retryAfterSeconds > 0);
-  assert.match(blocked.message, /demo limit/i);
+  assert.match(blocked.message, /한도/);
 });
 
 test("callers are counted separately", () => {

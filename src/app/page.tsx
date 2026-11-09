@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, CheckCircle2 } from "lucide-react";
 
-import AccessibilityScore from "@/components/AccessibilityScore";
 import AppNav from "@/components/AppNav";
 import IntroScreen from "@/components/IntroScreen";
 import {
@@ -23,7 +22,7 @@ import {
   type ConditionId,
   type WorkflowStage,
 } from "@/components/WorkflowContext";
-import { runEngine, scoreAccessibility } from "@/lib/engine";
+import { runEngine } from "@/lib/engine";
 import { shortCitation } from "@/lib/standards";
 import {
   AnalysisUnavailableError,
@@ -31,7 +30,7 @@ import {
   classifyRepair,
   extractObjectives,
 } from "@/lib/analysisSource";
-import { buildSummary, downloadSummary, summaryFilename } from "@/lib/exportSummary";
+import { buildStudentHandout, downloadHtml, handoutFilename } from "@/lib/studentHandout";
 import { applyRepairs } from "@/lib/repairs";
 import type { Analysis, FrictionMoment, RevisedAssignment, Step } from "@/lib/schema";
 import { BIOLOGY_SAMPLE, BIOLOGY_TEXT } from "@/samples/biology";
@@ -42,20 +41,20 @@ const MIN_LOADING_MS = 2400;
 function describeError(error: unknown): string {
   if (error instanceof AnalysisUnavailableError) return error.message;
   if (error instanceof Error && error.message) return error.message;
-  return "Something went wrong analysing that assignment. Try again.";
+  return "이 과제를 분석하는 중 문제가 발생했습니다. 다시 시도해주세요.";
 }
 
 const STATUS_LABEL: Record<WorkflowStage, string> = {
-  intro: "AccessLens introduction",
-  analyze: "New analysis",
-  loading: "Analyzing the task",
-  goal: "Learning goal review",
-  journey: "Journey scan complete",
-  barrier: "Reviewing a friction moment",
-  repair: "Reviewing repairs",
-  constraint: "Testing access conditions",
-  preview: "Student preview",
-  complete: "Analysis complete",
+  intro: "Homework evaluator 소개",
+  analyze: "새 분석",
+  loading: "과제 분석 중",
+  goal: "학습 목표 확인",
+  journey: "과제 분석 완료",
+  barrier: "어려움 확인 중",
+  repair: "개선안 검토 중",
+  constraint: "접근성 조건 테스트 중",
+  preview: "과제 개선안 미리보기",
+  complete: "분석 완료",
 };
 
 export default function Home() {
@@ -88,8 +87,7 @@ export default function Home() {
     () => ({ ...baseAnalysis, steps }),
     [baseAnalysis, steps],
   );
-  const report = useMemo(() => runEngine(analysis, analyzedText), [analysis, analyzedText]);
-  const confidence = useMemo(() => scoreAccessibility(report, analysis), [report, analysis]);
+  const report = useMemo(() => runEngine(analysis), [analysis]);
 
   // The same graph with accepted repairs applied. Everything downstream — the
   // score, the constraint tests — recomputes from this, so an applied repair
@@ -99,24 +97,10 @@ export default function Home() {
     [analysis, appliedRepairIds],
   );
   const repairedAnalysis = repairApplication.analysis;
-  const resolvedFrictionIds = useMemo(
-    () =>
-      new Set(
-        repairApplication.frictionResolutions
-          .filter((resolution) => resolution.status === "resolved")
-          .map((resolution) => resolution.frictionId),
-      ),
-    [repairApplication.frictionResolutions],
-  );
   const repairedReport = useMemo(
-    () => runEngine(repairedAnalysis, analyzedText),
-    [repairedAnalysis, analyzedText],
+    () => runEngine(repairedAnalysis),
+    [repairedAnalysis],
   );
-  const repairedConfidence = useMemo(
-    () => scoreAccessibility(repairedReport, repairedAnalysis, resolvedFrictionIds),
-    [repairedReport, repairedAnalysis, resolvedFrictionIds],
-  );
-
   const selectedStep = useMemo(() => {
     if (!selectedFriction) return null;
     const matched = selectedFriction.stepIds
@@ -141,6 +125,21 @@ export default function Home() {
     [analyzedText, objective, appliedRepairIds, steps],
   );
   const currentRevision = revised?.key === revisionKey ? revised.value : null;
+  // The student handout is drawn from the repaired steps, so its tree and its
+  // excerpts describe the assignment the educator is now setting.
+  const handoutHtml = useMemo(
+    () =>
+      currentRevision
+        ? buildStudentHandout({
+            revised: currentRevision,
+            objective,
+            originalSteps: steps,
+            repairedSteps: repairedAnalysis.steps,
+            appliedRepairIds,
+          })
+        : null,
+    [currentRevision, objective, steps, repairedAnalysis.steps, appliedRepairIds],
+  );
 
   useEffect(() => {
     if (stage === "intro") return;
@@ -241,22 +240,9 @@ export default function Home() {
     }
   }
 
-  function exportSummary() {
-    if (!currentRevision) return;
-    downloadSummary(
-      summaryFilename(currentRevision.title),
-      // Measured against the repaired graph, matching the revised assignment
-      // the file carries and the after-score shown on the completion screen.
-      buildSummary(currentRevision, objective, {
-        analysis,
-        report,
-        scoreBefore: confidence.score,
-        repairedAnalysis,
-        repairedReport,
-        scoreAfter: repairedConfidence.score,
-        frictionResolutions: repairApplication.frictionResolutions,
-      })
-    );
+  function exportStudentHtml() {
+    if (!currentRevision || !handoutHtml) return;
+    downloadHtml(handoutFilename(currentRevision.title), handoutHtml);
   }
 
   const startOver = useCallback(() => {
@@ -305,8 +291,8 @@ export default function Home() {
           </p>
         )}
         {analysisWarnings.length > 0 && (
-          <aside className="workflow-warning" aria-label="Analysis quality warnings">
-            <strong>Some model relationships were repaired before measurement.</strong>
+          <aside className="workflow-warning" aria-label="분석 품질 경고">
+            <strong>측정 전에 모델이 만든 일부 관계가 자동으로 정리되었습니다.</strong>
             <ul>{analysisWarnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>
           </aside>
         )}
@@ -326,14 +312,13 @@ export default function Home() {
             <>
               <JourneyScan analysis={analysis} report={report} />
               <section className="journey-bottom">
-                <AccessibilityScore {...confidence} />
                 {analysis.frictionMoments.length > 0 ? (
                   <button
                     type="button"
                     className="button button--primary"
                     onClick={() => { setSelectedFriction(analysis.frictionMoments[0]); goToStage("barrier"); }}
                   >
-                    Review friction <ArrowRight size={17} aria-hidden="true" />
+                    어려움 확인하기 <ArrowRight size={17} aria-hidden="true" />
                   </button>
                 ) : (
                   // Nothing to trace and nothing to repair. Skipping straight to
@@ -342,14 +327,14 @@ export default function Home() {
                   <div className="journey-clear">
                     <p>
                       <CheckCircle2 size={17} aria-hidden="true" />
-                      No friction moments were identified. The score breakdown may still show independently measured demands.
+                      어려움이 발견되지 않았습니다. 다만 점수 내역에는 개별적으로 측정된 부담이 여전히 표시될 수 있습니다.
                     </p>
                     <button
                       type="button"
                       className="button button--primary"
                       onClick={() => goToStage("constraint")}
                     >
-                      Test access conditions <ArrowRight size={17} aria-hidden="true" />
+                      접근성 조건 테스트하기 <ArrowRight size={17} aria-hidden="true" />
                     </button>
                   </div>
                 )}
@@ -382,6 +367,7 @@ export default function Home() {
               revisionKey={revisionKey}
               existingRevision={currentRevision}
               onRevised={recordRevision}
+              handoutHtml={handoutHtml}
             />
           )}
           {stage === "complete" && (
@@ -397,10 +383,8 @@ export default function Home() {
               ).length}
               repairsApplied={appliedRepairIds.length}
               goalPreserved={goalPreserved}
-              scoreBefore={confidence.score}
-              scoreAfter={repairedConfidence.score}
               canExport={currentRevision !== null}
-              onExport={exportSummary}
+              onExport={exportStudentHtml}
             />
           )}
         </div>

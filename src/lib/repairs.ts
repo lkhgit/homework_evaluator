@@ -183,7 +183,7 @@ function resolutionFor(
     return {
       frictionId: moment.id,
       status: "unresolved",
-      reason: "No accepted repair changed the measurement behind this finding.",
+      reason: "채택된 개선안 중 이 어려움의 측정값을 바꾼 것이 없습니다.",
     };
   }
 
@@ -193,27 +193,27 @@ function resolutionFor(
     return {
       frictionId: moment.id,
       status: "unverified",
-      reason: "The repair was applied, but this barrier is not represented by a measurable demand.",
+      reason: "개선안이 적용되었지만, 이 어려움은 측정 가능한 부담으로 표현되지 않습니다.",
     };
   }
   if (!before) {
     return {
       frictionId: moment.id,
       status: "unverified",
-      reason: "The original task graph did not contain the measured condition claimed by this finding.",
+      reason: "원래 작업 그래프에는 이 어려움이 가리키는 측정 조건이 없었습니다.",
     };
   }
   if (after) {
     return {
       frictionId: moment.id,
       status: "unresolved",
-      reason: "The measured condition is still present after the accepted repair.",
+      reason: "개선안을 적용한 뒤에도 측정된 조건이 여전히 남아 있습니다.",
     };
   }
   return {
     frictionId: moment.id,
     status: "resolved",
-    reason: "The measured condition was present before and is absent after the repair.",
+    reason: "개선 전에는 측정된 조건이 있었지만, 개선 후에는 사라졌습니다.",
   };
 }
 

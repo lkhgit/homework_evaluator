@@ -7,26 +7,15 @@ const PROGRESS = [
   // Named for the stage, not the action: every other entry is a place you can
   // stand ("Goal Lock", "Journey Scan"), so calling this one "New Analysis"
   // made stepping back to it read as though it would discard your work.
-  { number: 1, label: "Assignment", target: "analyze", stages: ["analyze", "loading"] },
-  { number: 2, label: "Goal Lock", target: "goal", stages: ["goal"] },
-  { number: 3, label: "Journey Scan", target: "journey", stages: ["journey"] },
-  { number: 4, label: "Friction", target: "barrier", stages: ["barrier"] },
-  { number: 5, label: "Repair", target: "repair", stages: ["repair"] },
-  { number: 6, label: "Test", target: "constraint", stages: ["constraint"] },
-  { number: 7, label: "Preview", target: "preview", stages: ["preview"] },
+  { number: 1, label: "과제", target: "analyze", stages: ["analyze", "loading"] },
+  { number: 2, label: "목표 확정", target: "goal", stages: ["goal"] },
+  { number: 3, label: "과제 분석", target: "journey", stages: ["journey"] },
+  { number: 4, label: "어려움", target: "barrier", stages: ["barrier"] },
+  { number: 5, label: "개선", target: "repair", stages: ["repair"] },
+  { number: 6, label: "검증", target: "constraint", stages: ["constraint"] },
+  { number: 7, label: "미리보기", target: "preview", stages: ["preview"] },
 ] as const;
 
-function LogoMark({ small = false }: { small?: boolean }) {
-  return (
-    <span className={`logo-mark ${small ? "logo-mark--small" : ""}`} aria-hidden="true">
-      <span />
-      <span />
-      <span />
-    </span>
-  );
-}
-
-export { LogoMark };
 
 interface AppNavProps {
   stage: WorkflowStage;
@@ -46,12 +35,11 @@ export default function AppNav({ stage, visited, onNavigate }: AppNavProps) {
 
   return (
     <header className="app-nav">
-      <div className="brand-lockup" aria-label="AccessLens">
-        <LogoMark small />
-        <span>AccessLens</span>
+      <div className="brand-lockup" aria-label="Homework evaluator">
+        <span>Homework evaluator</span>
       </div>
 
-      <nav aria-label="Analysis progress" className="progress-nav">
+      <nav aria-label="분석 진행 단계" className="progress-nav">
         <ol>
           {PROGRESS.map((item, index) => {
             const active = index === activeIndex;
@@ -82,12 +70,12 @@ export default function AppNav({ stage, visited, onNavigate }: AppNavProps) {
                     onClick={() => onNavigate(item.target)}
                   >
                     {inner}
-                    <span className="sr-only">, go back to this step</span>
+                    <span className="sr-only">, 이 단계로 돌아가기</span>
                   </button>
                 ) : (
                   <span className="progress-link progress-link--static">
                     {inner}
-                    {active && <span className="sr-only">, current step</span>}
+                    {active && <span className="sr-only">, 현재 단계</span>}
                   </span>
                 )}
               </li>
@@ -96,8 +84,8 @@ export default function AppNav({ stage, visited, onNavigate }: AppNavProps) {
         </ol>
       </nav>
 
-      <div className="profile-avatar" aria-label="Profile for Maya Chen">
-        MC
+      <div className="profile-avatar" aria-label="사용자 프로필">
+        나
       </div>
     </header>
   );

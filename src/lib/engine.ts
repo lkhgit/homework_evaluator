@@ -1,4 +1,3 @@
-import rs from "text-readability";
 import type { Analysis, Step } from "./schema";
 
 /**
@@ -26,15 +25,6 @@ export const CONSERVATIVE_READING_WPM = 130;
 const BASE_SECONDS_PER_STEP = 30;
 const PRECISION_STEP_EXTRA_SECONDS = 30;
 const RESPONSE_STEP_EXTRA_SECONDS = 60;
-
-const INSTRUCTION_VERBS = new Set([
-  "open", "read", "watch", "listen", "complete", "answer", "submit", "record",
-  "drag", "click", "select", "choose", "calculate", "compute", "explain",
-  "describe", "write", "type", "remember", "note", "use", "return", "navigate",
-  "download", "upload", "review", "compare", "identify", "measure", "observe",
-  "adjust", "set", "run", "find", "go", "click", "enter", "upload", "save",
-  "summarize", "discuss", "present", "create", "draw", "label", "check",
-]);
 
 export interface CarriedItem {
   id: string;
@@ -93,20 +83,10 @@ export interface TimingReport {
   verdictConservative: TimingVerdict;
 }
 
-export interface TextReport {
-  wordCount: number;
-  sentenceCount: number;
-  fleschKincaidGrade: number;
-  smogIndex: number;
-  instructionDensity: number;
-  densestParagraphIndex: number | null;
-}
-
 export interface EngineReport {
   memory: MemoryReport;
   switching: SwitchingReport;
   timing: TimingReport;
-  text: TextReport;
 }
 
 function round(value: number, places = 1): number {
@@ -314,126 +294,6 @@ export function analyzeTiming(analysis: Analysis): TimingReport {
   };
 }
 
-function countInstructionSentences(paragraph: string): number {
-  return paragraph
-    .split(/(?<=[.!?])\s+/)
-    .filter((sentence) => {
-      const first = sentence.trim().toLowerCase().match(/^[a-z]+/);
-      return first !== null && INSTRUCTION_VERBS.has(first[0]);
-    }).length;
-}
-
-export function analyzeText(assignmentText: string): TextReport {
-  const trimmed = assignmentText.trim();
-  const paragraphs = trimmed.split(/\n\s*\n/).filter((p) => p.trim().length > 0);
-
-  let instructionDensity = 0;
-  let densestParagraphIndex: number | null = null;
-  paragraphs.forEach((paragraph, index) => {
-    const count = countInstructionSentences(paragraph);
-    if (count > instructionDensity) {
-      instructionDensity = count;
-      densestParagraphIndex = index;
-    }
-  });
-
-  const wordCount = trimmed.length === 0 ? 0 : trimmed.split(/\s+/).length;
-
-  let fleschKincaidGrade = 0;
-  let smogIndex = 0;
-  let sentenceCount = 0;
-  if (trimmed.length > 0) {
-    fleschKincaidGrade = round(rs.fleschKincaidGrade(trimmed));
-    smogIndex = round(rs.smogIndex(trimmed));
-    sentenceCount = rs.sentenceCount(trimmed);
-  }
-
-  return {
-    wordCount,
-    sentenceCount,
-    fleschKincaidGrade,
-    smogIndex,
-    instructionDensity,
-    densestParagraphIndex,
-  };
-}
-
-export interface ScoreDeduction {
-  label: string;
-  points: number;
-}
-
-export interface AccessibilityScore {
-  score: number;
-  breakdown: ScoreDeduction[];
-}
-
-/**
- * A single figure for how much task-level friction the design carries. It is
- * derived entirely from measurements above and from the goal-relevance calls
- * the educator can see and overrule — there is no model-supplied number in it,
- * and the breakdown is surfaced in the interface so any figure can be traced
- * back to the thing that caused it.
- *
- * Deliberately not a compliance score: it says nothing about WCAG conformance.
- */
-export function scoreAccessibility(
-  report: EngineReport,
-  analysis: Analysis,
-  resolvedFrictionIds: ReadonlySet<string> = new Set()
-): AccessibilityScore {
-  const breakdown: ScoreDeduction[] = [];
-  const deduct = (label: string, points: number) => {
-    if (points > 0) breakdown.push({ label, points: -points });
-  };
-
-  const overCapacity = Math.max(0, report.memory.peakLoad - report.memory.capacity);
-  deduct(
-    `Working memory ${report.memory.peakLoad} items at peak, above the ~${report.memory.capacity}-item capacity`,
-    overCapacity * 8
-  );
-
-  const decaying = report.memory.carried.filter((item) => item.decayRisk).length;
-  deduct(
-    `${decaying} value${decaying === 1 ? "" : "s"} carried across an environment change`,
-    decaying * 5
-  );
-
-  const extraSwitches = Math.max(0, report.switching.transitions - 3);
-  deduct(`${report.switching.transitions} environment switches`, extraSwitches * 3);
-
-  if (report.timing.verdict === "infeasible") {
-    deduct("Time limit is shorter than the task requires", 15);
-  } else if (report.timing.verdict === "tight") {
-    deduct("Time limit leaves little margin", 8);
-  }
-  if (
-    report.timing.verdict !== "infeasible" &&
-    report.timing.verdictConservative === "infeasible"
-  ) {
-    deduct("A slower reader would run out of time", 5);
-  }
-
-  const activeFriction = analysis.frictionMoments.filter(
-    (friction) => !resolvedFrictionIds.has(friction.id)
-  );
-  const high = activeFriction.filter((f) => f.severity === "high").length;
-  const medium = activeFriction.filter((f) => f.severity === "medium").length;
-  deduct(`${high} high-severity friction moment${high === 1 ? "" : "s"}`, high * 4);
-  deduct(`${medium} moderate friction moment${medium === 1 ? "" : "s"}`, medium * 2);
-
-  const incidental = analysis.steps.filter(
-    (step) => step.goalRelevance === "incidental" && step.repair !== null
-  ).length;
-  deduct(
-    `${incidental} repairable demand${incidental === 1 ? "" : "s"} unrelated to the goal`,
-    incidental * 2
-  );
-
-  const total = breakdown.reduce((sum, item) => sum + item.points, 0);
-  return { score: Math.max(0, Math.min(100, 100 + total)), breakdown };
-}
-
 /**
  * Brings a model-supplied graph inside the ranges the schema describes.
  *
@@ -474,11 +334,10 @@ export function clampAnalysis(analysis: Analysis): Analysis {
   };
 }
 
-export function runEngine(analysis: Analysis, assignmentText: string): EngineReport {
+export function runEngine(analysis: Analysis): EngineReport {
   return {
     memory: analyzeMemory(analysis.steps),
     switching: analyzeSwitching(analysis.steps),
     timing: analyzeTiming(analysis),
-    text: analyzeText(assignmentText),
   };
 }

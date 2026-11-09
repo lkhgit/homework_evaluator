@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 
-import { MODEL, SYSTEM_PROMPT, describeModelFailure, getClient } from "@/lib/claude";
+import { locateEvidence } from "@/lib/evidenceGuard";
+import { describeModelFailure, generateStructured } from "@/lib/openai";
 import { ANALYSIS_LIMIT, checkRateLimit } from "@/lib/rateLimit";
 import { previewRequestSchema, revisedAssignmentSchema } from "@/lib/schema";
-import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 
 export const maxDuration = 60;
 
@@ -12,7 +12,7 @@ export async function POST(request: Request) {
   const parsed = previewRequestSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json(
-      { error: "Provide the assignment, objective, and at least one complete repair." },
+      { error: "과제 지문, 학습 목표, 그리고 최소 하나의 완전한 개선안을 제공해주세요." },
       { status: 400 }
     );
   }
@@ -25,7 +25,8 @@ export async function POST(request: Request) {
     );
   }
 
-  const { assignmentText, lockedObjective, repairs } = parsed.data;
+  const { assignmentText, lockedObjective, repairs, steps } = parsed.data;
+  const stepList = steps.map((step) => `- ${step.id}: ${step.action}`).join("\n") || "none";
 
   const repairList = repairs
     .map(
@@ -35,21 +36,9 @@ export async function POST(request: Request) {
     .join("\n\n");
 
   try {
-    const response = await getClient().messages.parse({
-      model: MODEL,
-      max_tokens: 4000,
-      system: [
-        {
-          type: "text",
-          text: SYSTEM_PROMPT,
-          cache_control: { type: "ephemeral", ttl: "1h" },
-        },
-      ],
-      output_config: { effort: "medium", format: zodOutputFormat(revisedAssignmentSchema) },
-      messages: [
-        {
-          role: "user",
-          content: `Rewrite this assignment so a student can read it directly, applying exactly the repairs the educator accepted and nothing else.
+    const revised = await generateStructured({
+      name: "revised_assignment",
+      prompt: `Rewrite this assignment so a student can read it directly, applying exactly the repairs the educator accepted and nothing else.
 
 Rules:
 - Keep the academic content identical. The locked objective below is still assessed in full, at the same level of difficulty. You are changing how students access and demonstrate the learning, never what they must learn.
@@ -57,6 +46,7 @@ Rules:
 - Write in the educator's own voice, addressing the student directly. Preserve the original's structure, numbering, and any resource names or links.
 - Where a repair removes a requirement, the replacement must carry the same academic weight — an alternative route to demonstrating the same understanding, not an easier one.
 - Return the complete assignment, not a diff or a summary.
+- Then, for each step in the step list, copy into stepExcerpts the sentence or clause of YOUR revisedText that tells the student to do that step, character-for-character. Leave out steps your revisedText does not mention. Never paraphrase: an excerpt that is not found verbatim in revisedText is discarded.
 
 <locked_objective>
 ${lockedObjective}
@@ -66,21 +56,35 @@ ${lockedObjective}
 ${repairList}
 </accepted_repairs>
 
+<steps>
+${stepList}
+</steps>
+
 <original_assignment>
 ${assignmentText}
 </original_assignment>`,
-        },
-      ],
+      schema: revisedAssignmentSchema,
+      effort: "minimal",
+      maxOutputTokens: 6000,
     });
-
-    if (!response.parsed_output) {
+    if (!revised) {
       return NextResponse.json(
-        { error: "The revised assignment came back empty. Try again." },
+        { error: "수정된 과제 생성 결과가 비어 있습니다. 다시 시도해주세요." },
         { status: 502 }
       );
     }
 
-    return NextResponse.json(response.parsed_output);
+    // Only excerpts that really are in the rewrite, for steps that really exist.
+    const knownStepIds = new Set(steps.map((step) => step.id));
+    const seen = new Set<string>();
+    const stepExcerpts = revised.stepExcerpts.filter((entry) => {
+      if (!knownStepIds.has(entry.stepId) || seen.has(entry.stepId)) return false;
+      if (!locateEvidence(revised.revisedText, entry.excerpt.trim())) return false;
+      seen.add(entry.stepId);
+      return true;
+    });
+
+    return NextResponse.json({ ...revised, stepExcerpts });
   } catch (error) {
     console.error("preview generation failed", error);
     const failure = describeModelFailure(error);

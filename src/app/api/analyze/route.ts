@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { MODEL, SYSTEM_PROMPT, describeModelFailure, getClient } from "@/lib/claude";
+import { describeModelFailure, generateStructured } from "@/lib/openai";
 import { clampAnalysis } from "@/lib/engine";
 import { verifyEvidence } from "@/lib/evidenceGuard";
 import { normalizeAnalysisGraph } from "@/lib/graphNormalizer";
@@ -12,20 +12,11 @@ import {
   type Analysis,
   type TaskGraph,
 } from "@/lib/schema";
-import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 
 // Two sequential model calls. The default 60s ceiling is not enough for a long
 // assignment, and a timeout here surfaces to the educator as "could not be
 // reached", which is the least useful thing the app can say.
 export const maxDuration = 300;
-
-const CACHED_SYSTEM = [
-  {
-    type: "text" as const,
-    text: SYSTEM_PROMPT,
-    cache_control: { type: "ephemeral" as const, ttl: "1h" as const },
-  },
-];
 
 /** A compact view of the graph, so the repair pass sees the steps it must key against. */
 function describeSteps(graph: TaskGraph): string {
@@ -55,7 +46,7 @@ export async function POST(request: Request) {
   const parsed = analysisRequestSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json(
-      { error: "Paste the full assignment and lock a learning objective before analysing." },
+      { error: "과제 전체 내용을 붙여넣고 학습 목표를 확정한 뒤 분석해주세요." },
       { status: 400 }
     );
   }
@@ -71,18 +62,12 @@ export async function POST(request: Request) {
   const { assignmentText, lockedObjective } = parsed.data;
 
   try {
-    const client = getClient();
-
-    // Pass one: the task graph, without repairs.
-    const graphResponse = await client.messages.parse({
-      model: MODEL,
-      max_tokens: 16000,
-      system: CACHED_SYSTEM,
-      output_config: { effort: "medium", format: zodOutputFormat(taskGraphSchema) },
-      messages: [
-        {
-          role: "user",
-          content: `The educator has locked this learning objective:
+    // Pass one: the task graph, without repairs. This is the pass whose
+    // judgement calls matter most, so it keeps a low-but-nonzero thinking
+    // level while everything else in this file runs at MINIMAL to save quota.
+    const graph = await generateStructured({
+      name: "task_graph",
+      prompt: `The educator has locked this learning objective:
 
 <learning_objective>
 ${lockedObjective}
@@ -92,34 +77,26 @@ Decompose the assignment below into the sequence of actions a student performs, 
 
 Remember: evidence quotes must be copied character-for-character from the assignment; information dependencies drive the working-memory analysis; each independent timer belongs in timeConstraints with its exact step scope; and a duration attached to one step belongs in estimatedMinutes.
 
+For requires, ask of every earlier step: if the student skipped it, could they still start this step? List only the earlier steps for which the answer is no, and only direct ones — never repeat a prerequisite that another listed prerequisite already depends on.
+
 <assignment>
 ${assignmentText}
 </assignment>`,
-        },
-      ],
+      schema: taskGraphSchema,
+      effort: "low",
+      maxOutputTokens: 16000,
     });
-
-    const graph = graphResponse.parsed_output;
     if (!graph) {
       return NextResponse.json(
-        { error: "The analysis came back empty. Try again." },
+        { error: "분석 결과가 비어 있습니다. 다시 시도해주세요." },
         { status: 502 }
       );
     }
 
     // Pass two: repairs for the steps that need one, keyed to the graph above.
-    const repairResponse = await client.messages.parse({
-      model: MODEL,
-      max_tokens: 8000,
-      system: CACHED_SYSTEM,
-      // The hard judgements were made in pass one. This pass writes the
-      // suggestions and states their effects, which does not need the same
-      // reasoning budget and keeps the request inside its time ceiling.
-      output_config: { effort: "low", format: zodOutputFormat(repairProposalsSchema) },
-      messages: [
-        {
-          role: "user",
-          content: `This assignment has already been decomposed. Propose repairs for the steps that impose a demand the locked objective does not require.
+    const repairProposals = await generateStructured({
+      name: "repair_proposals",
+      prompt: `This assignment has already been decomposed. Propose repairs for the steps that impose a demand the locked objective does not require.
 
 <learning_objective>
 ${lockedObjective}
@@ -151,13 +128,14 @@ Use only step ids from the list above, and only timer ids from the timers list. 
 <assignment>
 ${assignmentText}
 </assignment>`,
-        },
-      ],
+      schema: repairProposalsSchema,
+      effort: "minimal",
+      maxOutputTokens: 8000,
     });
 
     // Steps the repair pass did not name simply keep no repair.
     const byStep = new Map(
-      (repairResponse.parsed_output?.repairs ?? []).map((entry) => [entry.stepId, entry.repair])
+      (repairProposals?.repairs ?? []).map((entry) => [entry.stepId, entry.repair])
     );
     const merged: Analysis = {
       timeConstraints: graph.timeConstraints,
@@ -176,7 +154,7 @@ ${assignmentText}
     const warnings = [...normalized.warnings];
     if (checked.discarded > 0) {
       warnings.push(
-        `${checked.discarded} evidence quote${checked.discarded === 1 ? " was" : "s were"} removed because the text could not be verified in the assignment.`
+        `근거 인용문 ${checked.discarded}개가 과제 원문에서 확인되지 않아 제거되었습니다.`
       );
     }
     return NextResponse.json({ analysis: checked.analysis, warnings });

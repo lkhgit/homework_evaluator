@@ -45,7 +45,7 @@ export function normalizeAnalysisGraph(source: Analysis): NormalizedAnalysis {
     occurrences.set(originalId, occurrence);
     const id = renamedId(originalId, occurrence, reservedStepIds);
     warnings.push(
-      `Step id "${originalId || "(empty)"}" was ambiguous and was renamed to "${id}"; references to the ambiguous id were removed.`
+      `단계 id "${originalId || "(비어 있음)"}"가 중복되어 "${id}"로 변경되었습니다. 이 중복 id를 참조하던 항목은 제거되었습니다.`
     );
     return { ...step, id };
   });
@@ -54,28 +54,46 @@ export function normalizeAnalysisGraph(source: Analysis): NormalizedAnalysis {
     originalStepIds.filter((id) => id && stepCounts.get(id) === 1)
   );
   const producedEarlier = new Set<string>();
+  const producerOf = new Map<string, string>();
+  const earlierStepIds = new Set<string>();
   steps = steps.map((step, index) => {
     const produces = unique(step.produces);
     const requestedConsumes = unique(step.consumes);
     const consumes = requestedConsumes.filter((item) => producedEarlier.has(item));
     if (produces.length !== step.produces.length) {
-      warnings.push(`Duplicate or empty produced values were removed from step "${step.id}".`);
+      warnings.push(`단계 "${step.id}"에서 중복되거나 비어 있는 생성 값이 제거되었습니다.`);
     }
     if (consumes.length !== step.consumes.length) {
       warnings.push(
-        `Dependencies without an earlier producer were removed from step "${step.id}".`
+        `단계 "${step.id}"에서 이전에 생성된 적 없는 의존 항목이 제거되었습니다.`
       );
     }
-    for (const item of produces) producedEarlier.add(item);
+    // Prerequisites may only point backwards, which also rules out cycles.
+    const requestedRequires = unique(step.requires ?? []);
+    const requires = requestedRequires.filter((id) => earlierStepIds.has(id) && validReferenceIds.has(id));
+    if (requires.length !== (step.requires ?? []).length) {
+      warnings.push(`단계 "${step.id}"에서 이전 단계가 아닌 선행 단계 참조가 제거되었습니다.`);
+    }
+    // Using information means the step that produced it had to happen first.
+    for (const item of consumes) {
+      const producer = producerOf.get(item);
+      if (producer && !requires.includes(producer)) requires.push(producer);
+    }
+    for (const item of produces) {
+      producedEarlier.add(item);
+      if (!producerOf.has(item)) producerOf.set(item, step.id);
+    }
+    earlierStepIds.add(step.id);
     const contextSwitch =
       index > 0 && step.environment.trim() !== steps[index - 1].environment.trim();
     if (contextSwitch !== step.demands.contextSwitch) {
-      warnings.push(`Context switching was recomputed for step "${step.id}".`);
+      warnings.push(`단계 "${step.id}"의 환경 전환 여부가 다시 계산되었습니다.`);
     }
     return {
       ...step,
       produces,
       consumes,
+      requires,
       demands: { ...step.demands, contextSwitch },
     };
   });
@@ -97,7 +115,7 @@ export function normalizeAnalysisGraph(source: Analysis): NormalizedAnalysis {
       constraintOccurrences.set(originalId, occurrence);
       id = renamedId(originalId || "timer", occurrence, reservedConstraintIds);
       warnings.push(
-        `Timer id "${originalId || "(empty)"}" was ambiguous and was renamed to "${id}"; repair references to the ambiguous id were removed.`
+        `타이머 id "${originalId || "(비어 있음)"}"가 중복되어 "${id}"로 변경되었습니다. 이 중복 id를 참조하던 개선안은 제거되었습니다.`
       );
     }
 
@@ -105,10 +123,10 @@ export function normalizeAnalysisGraph(source: Analysis): NormalizedAnalysis {
       validReferenceIds.has(stepId)
     );
     if (stepIds.length !== constraint.stepIds.length) {
-      warnings.push(`Invalid or duplicate step references were removed from timer "${id}".`);
+      warnings.push(`타이머 "${id}"에서 유효하지 않거나 중복된 단계 참조가 제거되었습니다.`);
     }
     if (stepIds.length === 0) {
-      warnings.push(`Timer "${id}" was removed because it had no valid steps.`);
+      warnings.push(`타이머 "${id}"는 유효한 단계가 없어 제거되었습니다.`);
       continue;
     }
     timeConstraints.push({ ...constraint, id, stepIds });
@@ -142,8 +160,8 @@ export function normalizeAnalysisGraph(source: Analysis): NormalizedAnalysis {
 
     warnings.push(
       uselessLimit
-        ? `A repair on step "${step.id}" proposed a time limit that is not longer than the current one, so it is not counted as a timing change.`
-        : `Invalid timer changes were removed from the repair on step "${step.id}".`
+        ? `단계 "${step.id}"의 개선안이 기존보다 길지 않은 제한 시간을 제안하여, 시간 개선으로 반영되지 않았습니다.`
+        : `단계 "${step.id}"의 개선안에서 유효하지 않은 타이머 변경이 제거되었습니다.`
     );
     return {
       ...step,
@@ -173,14 +191,14 @@ export function normalizeAnalysisGraph(source: Analysis): NormalizedAnalysis {
       const occurrence = (frictionOccurrences.get(originalId) ?? 0) + 1;
       frictionOccurrences.set(originalId, occurrence);
       id = renamedId(originalId || "friction", occurrence, reservedFrictionIds);
-      warnings.push(`Friction id "${originalId || "(empty)"}" was renamed to "${id}".`);
+      warnings.push(`어려움 id "${originalId || "(비어 있음)"}"가 "${id}"로 변경되었습니다.`);
     }
     const stepIds = unique(moment.stepIds).filter((stepId) => validReferenceIds.has(stepId));
     if (stepIds.length !== moment.stepIds.length) {
-      warnings.push(`Invalid or duplicate step references were removed from finding "${id}".`);
+      warnings.push(`어려움 "${id}"에서 유효하지 않거나 중복된 단계 참조가 제거되었습니다.`);
     }
     if (stepIds.length === 0) {
-      warnings.push(`Finding "${id}" was removed because it had no valid steps.`);
+      warnings.push(`어려움 "${id}"는 유효한 단계가 없어 제거되었습니다.`);
       return [];
     }
     return [{ ...moment, id, stepIds }];

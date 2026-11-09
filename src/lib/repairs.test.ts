@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { runEngine, scoreAccessibility } from "./engine";
 import { applyRepairs } from "./repairs";
 import type { Analysis, FrictionMoment, RepairEffects, Step } from "./schema";
 
@@ -33,6 +32,7 @@ function step(
     environment: "Canvas",
     produces: [],
     consumes: [],
+    requires: [],
     producedInfoStaysVisible: true,
     estimatedMinutes: null,
     evidence: "",
@@ -247,31 +247,6 @@ test("making carried values visible resolves measured memory friction", () => {
     [moment({ barrierType: "working_memory", stepIds: ["a", "b"] })]
   );
   assert.equal(applyRepairs(source, ["a"]).frictionResolutions[0].status, "resolved");
-});
-
-test("the after-score stops charging only verified resolved findings", () => {
-  const source = analysis(
-    [
-      step("a", {
-        repairEffects: effects({ reducesFineMotor: true }),
-        demands: { fineMotor: 3 } as Step["demands"],
-      }),
-    ],
-    [moment()]
-  );
-  const application = applyRepairs(source, ["a"]);
-  const before = scoreAccessibility(runEngine(source, "text"), source).score;
-  const resolved = new Set(
-    application.frictionResolutions
-      .filter((item) => item.status === "resolved")
-      .map((item) => item.frictionId)
-  );
-  const after = scoreAccessibility(
-    runEngine(application.analysis, "text"),
-    application.analysis,
-    resolved
-  ).score;
-  assert.ok(after > before);
 });
 
 test("an unrelated carried value does not keep a fixed memory finding open", () => {

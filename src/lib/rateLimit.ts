@@ -1,11 +1,11 @@
 /**
- * Best-effort rate limiting for a public demo.
+ * Best-effort rate limiting for a locally-run instance on a metered OpenAI key.
  *
- * State lives in the instance's memory, so this is a speed bump rather than a
- * guarantee: serverless instances do not share counters and a cold start resets
- * them. It is enough to stop one visitor hammering the analyse button and to
- * cap what a single warm instance can spend, which is the realistic risk for a
- * demo. The hard ceiling on cost is the spend limit set on the API key itself.
+ * State lives in the process's memory, so this is a speed bump rather than a
+ * guarantee. Its job here is not to stop abuse from strangers — this never
+ * runs anywhere but localhost — it is to stop an accidental double-click or a
+ * refresh loop from quietly burning through a free-tier daily quota during a
+ * demo. The numbers are intentionally conservative for that reason.
  */
 
 interface Window {
@@ -23,14 +23,14 @@ export interface Limit {
 }
 
 export const ANALYSIS_LIMIT: Limit = {
-  perCaller: 8,
-  global: 120,
+  perCaller: 6,
+  global: 6,
   windowMs: 60 * 60 * 1000,
 };
 
 export const LIGHT_LIMIT: Limit = {
-  perCaller: 20,
-  global: 300,
+  perCaller: 15,
+  global: 15,
   windowMs: 60 * 60 * 1000,
 };
 
@@ -79,7 +79,7 @@ export function checkRateLimit(request: Request, scope: string, limit: Limit): R
     return {
       allowed: false,
       retryAfterSeconds: caller.retryAfterSeconds,
-      message: `You have reached the demo limit of ${limit.perCaller} analyses per hour. Try again in about ${Math.ceil(caller.retryAfterSeconds / 60)} minute(s), or run AccessLens locally with your own API key.`,
+      message: `무료 API 한도를 아끼기 위해 시간당 ${limit.perCaller}회로 제한하고 있습니다. 약 ${Math.ceil(caller.retryAfterSeconds / 60)}분 후 다시 시도해주세요.`,
     };
   }
 
@@ -88,8 +88,7 @@ export function checkRateLimit(request: Request, scope: string, limit: Limit): R
     return {
       allowed: false,
       retryAfterSeconds: overall.retryAfterSeconds,
-      message:
-        "This demo has hit its hourly capacity. Try again shortly, or clone the repository and run it with your own API key.",
+      message: "이번 시간대 요청 한도에 도달했습니다. 잠시 후 다시 시도해주세요.",
     };
   }
 

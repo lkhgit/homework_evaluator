@@ -56,7 +56,7 @@ export async function extractPdfText(file: File): Promise<string> {
     const buffer = await file.arrayBuffer();
     document = await pdfjs.getDocument({ data: buffer }).promise;
   } catch {
-    throw new PdfTextError("That PDF could not be opened. It may be corrupt or password protected.");
+    throw new PdfTextError("이 PDF 파일을 열 수 없습니다. 파일이 손상되었거나 비밀번호로 보호되어 있을 수 있습니다.");
   }
 
   const pages: string[] = [];
@@ -98,7 +98,7 @@ export async function extractPdfText(file: File): Promise<string> {
 
   if (text.length < 40) {
     throw new PdfTextError(
-      "No readable text found. This looks like a scanned PDF — AccessLens needs a text layer, so paste the assignment text instead."
+      "읽을 수 있는 텍스트를 찾지 못했습니다. 스캔된 이미지 PDF로 보입니다 — Homework evaluator는 텍스트 레이어가 필요하므로, 과제 내용을 직접 붙여넣어주세요."
     );
   }
 
