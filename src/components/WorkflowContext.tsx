@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext } from "react";
+import { createContext, useContext, type ReactNode } from "react";
 import type { FrictionMoment } from "@/lib/schema";
 
 export type WorkflowStage =
@@ -31,11 +31,18 @@ interface WorkflowActions {
   selectCondition: (condition: ConditionId) => void;
   applyRepair: (stepId: string) => void;
   startOver: () => void;
+  /** The locked-goal summary box, drawn under each stage heading. */
+  summary?: ReactNode;
 }
 
 const WorkflowContext = createContext<WorkflowActions | null>(null);
 
 export const WorkflowProvider = WorkflowContext.Provider;
+
+/** The summary box if a provider supplies one; screens also render without it. */
+export function useWorkflowSummary(): ReactNode {
+  return useContext(WorkflowContext)?.summary ?? null;
+}
 
 export function useWorkflow() {
   const value = useContext(WorkflowContext);

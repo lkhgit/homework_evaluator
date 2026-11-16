@@ -23,20 +23,26 @@ export function chipsForDemands(demands: Demands): Chip[] {
   const chips: Chip[] = [];
 
   if (demands.workingMemory >= 2)
-    chips.push({ label: "작업 기억", level: demands.workingMemory, tone: "danger" });
+    chips.push({ label: "기억력", level: demands.workingMemory, tone: "danger" });
   if (demands.fineMotor >= 2)
     chips.push({ label: "정밀한 포인터 조작", level: demands.fineMotor, tone: "danger" });
   if (demands.timePressure >= 2)
     chips.push({ label: "시간 압박", level: demands.timePressure, tone: "danger" });
-  if (demands.readingLoad >= 3)
+  // Same threshold the repair checks use, so a step whose reading load is a
+  // finding also shows it here.
+  if (demands.readingLoad >= 2)
     chips.push({ label: "많은 읽기량", level: demands.readingLoad, tone: "warn" });
   if (demands.contextSwitch)
-    chips.push({ label: "환경 전환", tone: "warn" });
+    chips.push({ label: "도구 전환", tone: "warn" });
   if (demands.sensory.colorOnly)
-    chips.push({ label: "색상만이 유일한 단서", tone: "danger" });
+    chips.push({ label: "색에만 의존하는 단서", tone: "danger" });
   if (demands.sensory.audioOnly)
-    chips.push({ label: "소리만이 유일한 단서", tone: "danger" });
-  if (demands.communication !== "none")
+    chips.push({ label: "소리에만 의존하는 단서", tone: "danger" });
+  // "multiple" means the student may choose, which is the repaired state, not
+  // a restriction.
+  if (demands.communication === "multiple")
+    chips.push({ label: "응답 방식 선택 가능", tone: "neutral" });
+  else if (demands.communication !== "none")
     chips.push({
       label: `${COMMUNICATION_LABEL[demands.communication] ?? demands.communication} 응답만 허용`,
       tone: "warn",
@@ -54,7 +60,7 @@ const TONE_CLASS: Record<Chip["tone"], string> = {
 export default function DemandChips({ demands }: { demands: Demands }) {
   const chips = chipsForDemands(demands);
   if (chips.length === 0) {
-    return <p className="text-xs text-muted">특별히 두드러지는 기능적 부담이 없습니다.</p>;
+    return <p className="text-xs text-muted">눈에 띄는 학생 부담이 없습니다.</p>;
   }
 
   return (
@@ -66,9 +72,12 @@ export default function DemandChips({ demands }: { demands: Demands }) {
         >
           <span className="first-letter:uppercase">{chip.label}</span>
           {chip.level !== undefined && (
-            <span aria-label={`3단계 중 ${chip.level}단계`} className="font-mono text-[10px] tracking-tight opacity-80">
-              {levelDots(chip.level)}
-            </span>
+            <>
+              <span aria-hidden="true" className="font-mono text-xs tracking-tight">
+                {levelDots(chip.level)}
+              </span>
+              <span className="sr-only">3단계 중 {chip.level}단계</span>
+            </>
           )}
         </li>
       ))}

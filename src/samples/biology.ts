@@ -21,6 +21,8 @@ export interface Sample {
   course: string;
   text: string;
   objectives: ObjectiveCandidate[];
+  /** The objective the bundled analysis was judged against. */
+  analysisObjective: string;
   analysis: Analysis;
 }
 
@@ -243,7 +245,9 @@ const steps: Step[] = [
   {
     id: "s8",
     action: "Enters the three remembered values into the quiz",
-    environment: "Canvas quiz",
+    // The quiz is a page inside Canvas, so it shares Canvas's label: the
+    // prompt forbids "Canvas quiz" because it counts as a separate tool.
+    environment: "Canvas",
     produces: [],
     consumes: TRIALS,
     requires: ["s7", "s5"],
@@ -251,9 +255,12 @@ const steps: Step[] = [
     demands: {
       workingMemory: 3,
       fineMotor: 0,
-      timePressure: 3,
+      // Rated 2, not 3: the stated timer does not pause, but the engine
+      // measures ample room inside it. The rating is not used for timing.
+      timePressure: 2,
       readingLoad: 1,
-      contextSwitch: true,
+      // Already in Canvas since s6; opening the quiz is not a new tool.
+      contextSwitch: false,
       sensory: { colorOnly: false, audioOnly: false },
       communication: "typed",
       wordCount: 40,
@@ -278,7 +285,9 @@ const steps: Step[] = [
   {
     id: "s9",
     action: "Answers questions 1 to 5 against a running twelve-minute timer",
-    environment: "Canvas quiz",
+    // The quiz is a page inside Canvas, so it shares Canvas's label: the
+    // prompt forbids "Canvas quiz" because it counts as a separate tool.
+    environment: "Canvas",
     produces: [],
     consumes: ["gradient_concept"],
     requires: ["s7", "s2"],
@@ -286,7 +295,7 @@ const steps: Step[] = [
     demands: {
       workingMemory: 2,
       fineMotor: 0,
-      timePressure: 3,
+      timePressure: 2,
       readingLoad: 2,
       contextSwitch: false,
       sensory: { colorOnly: false, audioOnly: false },
@@ -380,6 +389,8 @@ export const BIOLOGY_SAMPLE: Sample = {
   title: "Diffusion Lab: Concentration Gradients",
   course: "Introductory Biology",
   text: BIOLOGY_TEXT,
+  analysisObjective:
+    "Explain how concentration gradients influence molecular movement across a membrane.",
   objectives: [
     {
       text: "Explain how concentration gradients influence molecular movement across a membrane.",
@@ -422,12 +433,17 @@ export const BIOLOGY_SAMPLE: Sample = {
       },
       {
         id: "f3",
-        title: "The timer runs while the student is still reading",
+        title: "The quiz timer cannot be paused",
         stepIds: ["s9"],
-        severity: "high",
+        // Low, matching the measurement: the reading and answering load fits
+        // inside twelve minutes even at the conservative reading rate, so this
+        // is not a measured processing-time barrier and removing the timer is
+        // reported as unverified. What remains is the stated, qualitative fact
+        // that the clock does not pause.
+        severity: "low",
         barrierType: "time_pressure",
         explanation:
-          "Twelve minutes covers recalling three values, reading five questions and writing answers. The clock does not pause, so processing speed contributes to the grade alongside understanding.",
+          "The twelve-minute timer starts when the quiz opens and does not pause. The measured reading and answering time fits inside it even for a slower reader, so AccessLens does not measure this as processing-time pressure. The remaining concern is qualitative: a student cannot stop the clock, and whether speed belongs in this assessment is the educator's decision.",
       },
       {
         id: "f4",
@@ -440,12 +456,12 @@ export const BIOLOGY_SAMPLE: Sample = {
       },
       {
         id: "f5",
-        title: "Five environments in one assignment",
+        title: "Four tools in one assignment",
         stepIds: ["s2", "s3", "s6", "s10"],
         severity: "medium",
         barrierType: "context_switching",
         explanation:
-          "Completing the task means moving between Canvas, an article, a simulation, a quiz and a recording tool, re-establishing place each time.",
+          "Completing the task means moving between Canvas, an external article, a simulation and a recording tool, returning to Canvas twice and re-establishing place each time.",
       },
     ],
   },

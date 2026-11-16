@@ -137,7 +137,7 @@ const JourneyDiagram = forwardRef<HTMLDivElement, JourneyDiagramProps>(function 
               style={{ left: node.x, top: node.y, width: NODE_W, height: NODE_H }}
               onClick={() => onSelect(node.index)}
               aria-current={selected ? "step" : undefined}
-              aria-controls="journey-step-detail"
+              aria-controls={`activity-detail-${step.id}`}
               aria-label={`${node.index + 1}단계, ${step.environment}, 목표와의 관련성 ${relevanceLabel[step.goalRelevance]}, ${status}. ${step.action}`}
             >
               <span className="journey-card-topline">
