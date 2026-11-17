@@ -6,8 +6,6 @@ import {
   analyzeSwitching,
   analyzeTiming,
   clampAnalysis,
-  runEngine,
-  scoreAccessibility,
   WORKING_MEMORY_CAPACITY,
 } from "./engine";
 import type { Analysis, Step } from "./schema";
@@ -27,6 +25,7 @@ function step(overrides: Partial<Step> & Pick<Step, "id" | "environment">): Step
     action: "does something",
     produces: [],
     consumes: [],
+    requires: [],
     producedInfoStaysVisible: true,
     estimatedMinutes: null,
     evidence: "",
@@ -149,49 +148,6 @@ test("an untimed assignment is never judged infeasible", () => {
   const timing = analyzeTiming({ ...analysis, timeConstraints: [] });
   assert.equal(timing.verdict, "untimed");
   assert.deepEqual(timing.constraints, []);
-});
-
-test("confidence score deducts only from measured friction", () => {
-  const report = runEngine(analysis);
-  const { score, breakdown } = scoreAccessibility(report, analysis);
-
-  // 1 item over capacity (-8), 5 values carried across a switch (-25),
-  // 1 switch beyond three (-3), a tight limit (-8), and a slower reader
-  // running out entirely (-5) = 49 deducted from 100.
-  assert.equal(score, 51);
-  assert.equal(
-    breakdown.reduce((sum, item) => sum + item.points, 0),
-    -49
-  );
-  assert.ok(breakdown.every((item) => item.points < 0));
-});
-
-test("a task with no measured friction scores 100", () => {
-  const clean: Analysis = {
-    timeConstraints: [],
-    frictionMoments: [],
-    steps: [step({ id: "a", environment: "Canvas" })],
-  };
-  const report = runEngine(clean);
-  const { score, breakdown } = scoreAccessibility(report, clean);
-  assert.equal(score, 100);
-  assert.deepEqual(breakdown, []);
-});
-
-test("score never falls below zero", () => {
-  const brutal: Analysis = {
-    ...analysis,
-    frictionMoments: Array.from({ length: 40 }, (_, i) => ({
-      id: `f${i}`,
-      title: "friction",
-      stepIds: ["s2"],
-      severity: "high" as const,
-      barrierType: "working_memory" as const,
-      explanation: "",
-    })),
-  };
-  const report = runEngine(brutal);
-  assert.equal(scoreAccessibility(report, brutal).score, 0);
 });
 
 test("a stated step duration is counted as the time it takes", () => {

@@ -1,5 +1,5 @@
-import { analyzeMemory, analyzeTiming, timerPressesOn } from "./engine";
-import { timeConstraintChangesOf } from "./schemaTypes";
+import { analyzeMemory, analyzeTiming } from "./engine";
+import { timeConstraintChangesOf } from "./schema";
 import type {
   Analysis,
   BarrierType,
@@ -72,28 +72,9 @@ function memoryPresent(analysis: Analysis, moment: FrictionMoment): boolean {
   const report = analyzeMemory(analysis.steps);
   return (
     report.carried.some(
-      (item) =>
-        ids.has(item.producedAtStepId) &&
-        item.consumedAtStepIds.some((stepId) => ids.has(stepId))
+      (item) => ids.has(item.producedAtStepId) && ids.has(item.consumedAtStepId)
     ) || report.overCapacityStepIds.some((stepId) => ids.has(stepId))
   );
-}
-
-export type KeepVisibleTarget = "producer" | "consumer" | "none";
-
-/**
- * What a keep-visible repair can mean on this step.
- *
- * On a step that produces values it keeps them on screen from then on. On a
- * step that only uses earlier values it shows those values at that step: the
- * student no longer brings them there from memory, but any other step that
- * needs them still does. A step that does neither has nothing to keep visible,
- * so the effect changes no measurement there.
- */
-export function keepVisibleTarget(step: Step): KeepVisibleTarget {
-  if (step.produces.length > 0) return "producer";
-  if (step.consumes.length > 0) return "consumer";
-  return "none";
 }
 
 function contextTransitions(analysis: Analysis, moment: FrictionMoment): number {
@@ -114,10 +95,18 @@ function contextTransitions(analysis: Analysis, moment: FrictionMoment): number 
  * absent here, which resolutionFor already reports as unverified rather than as
  * a barrier that was fixed.
  */
-export function timingPresent(analysis: Analysis, moment: FrictionMoment): boolean {
+function timingPresent(analysis: Analysis, moment: FrictionMoment): boolean {
   const ids = new Set(moment.stepIds);
-  const timing = analyzeTiming(analysis);
-  return analysis.steps.some((step) => ids.has(step.id) && timerPressesOn(step, timing));
+  return analyzeTiming(analysis).constraints.some((constraint) => {
+    const covered = constraint.stepIds.filter((stepId) => ids.has(stepId));
+    if (covered.length === 0) return false;
+    if (constraint.verdict !== "comfortable") return true;
+    // A clock the student is still working under counts even where the
+    // arithmetic leaves room, but only for steps the clock actually covers.
+    return analysis.steps.some(
+      (step) => covered.includes(step.id) && step.demands.timePressure >= 2
+    );
+  });
 }
 
 function barrierPresent(analysis: Analysis, moment: FrictionMoment): boolean | null {
@@ -147,12 +136,9 @@ function relevantEffect(
   const referenced = [...effectsByStep].filter(([stepId]) => ids.has(stepId));
   switch (moment.barrierType) {
     case "working_memory":
-      return referenced.some(([stepId, effects]) => {
-        const step = source.steps.find((candidate) => candidate.id === stepId);
-        const keepsVisible =
-          effects.keepsInfoVisible && step !== undefined && keepVisibleTarget(step) !== "none";
-        return keepsVisible || effects.reducesWorkingMemory;
-      });
+      return referenced.some(
+        ([, effects]) => effects.keepsInfoVisible || effects.reducesWorkingMemory
+      );
     case "context_switching":
       return (
         [...effectsByStep.values()].some(
@@ -197,7 +183,7 @@ function resolutionFor(
     return {
       frictionId: moment.id,
       status: "unresolved",
-      reason: "채택한 개선안 중 이 항목의 측정값을 바꾼 것이 없습니다.",
+      reason: "채택된 개선안 중 이 어려움의 측정값을 바꾼 것이 없습니다.",
     };
   }
 
@@ -207,27 +193,27 @@ function resolutionFor(
     return {
       frictionId: moment.id,
       status: "unverified",
-      reason: "개선안은 적용했지만 이 문제는 측정할 수 있는 부담으로 나타나지 않습니다.",
+      reason: "개선안이 적용되었지만, 이 어려움은 측정 가능한 부담으로 표현되지 않습니다.",
     };
   }
   if (!before) {
     return {
       frictionId: moment.id,
       status: "unverified",
-      reason: "원래 단계 분석에 이 항목이 가리키는 측정 조건이 없었습니다.",
+      reason: "원래 작업 그래프에는 이 어려움이 가리키는 측정 조건이 없었습니다.",
     };
   }
   if (after) {
     return {
       frictionId: moment.id,
       status: "unresolved",
-      reason: "개선안을 적용한 뒤에도 측정된 조건이 남아 있습니다.",
+      reason: "개선안을 적용한 뒤에도 측정된 조건이 여전히 남아 있습니다.",
     };
   }
   return {
     frictionId: moment.id,
     status: "resolved",
-    reason: "개선 전에 측정된 조건이 개선 후에는 사라졌습니다.",
+    reason: "개선 전에는 측정된 조건이 있었지만, 개선 후에는 사라졌습니다.",
   };
 }
 
@@ -245,15 +231,12 @@ export function applyRepairs(
     const effects = step.repair.effects;
     effectsByStep.set(step.id, effects);
     appliedRepairIds.push(step.id);
-    const target = effects.keepsInfoVisible ? keepVisibleTarget(step) : "none";
     return {
       ...step,
       environment: effects.replacementEnvironment ?? step.environment,
-      producedInfoStaysVisible:
-        target === "producer" ? true : step.producedInfoStaysVisible,
-      ...(target === "consumer"
-        ? { referencedItems: [...new Set([...(step.referencedItems ?? []), ...step.consumes])] }
-        : {}),
+      producedInfoStaysVisible: effects.keepsInfoVisible
+        ? true
+        : step.producedInfoStaysVisible,
       demands: applyEffects(step.demands, effects),
       repair: null,
     };
@@ -286,36 +269,49 @@ export function applyRepairs(
     return [{ ...constraint, limitMinutes: limitMinutes ?? constraint.limitMinutes }];
   });
 
-  // A step whose covering timers changed is relaxed only when the clock no
-  // longer presses on it by the shared rule: no timer left covers it (0), or
-  // every remaining covering timer is comfortable at the conservative rate (1).
-  // A timer no repair touched keeps its steps as they were.
-  const changedConstraintIds = new Set([...removedConstraintIds, ...replacementLimits.keys()]);
-  const touchedStepIds = new Set(
+  const removedStepIds = new Set(
     source.timeConstraints
-      .filter((constraint) => changedConstraintIds.has(constraint.id))
+      .filter((constraint) => removedConstraintIds.has(constraint.id))
       .flatMap((constraint) => constraint.stepIds)
   );
-  const newTiming = analyzeTiming({ ...source, steps, timeConstraints });
-  steps = steps.map((step, index) => {
-    let timePressure = step.demands.timePressure;
-    if (touchedStepIds.has(step.id)) {
-      const covering = newTiming.constraints.filter((constraint) => constraint.stepIds.includes(step.id));
-      if (covering.length === 0) timePressure = 0;
-      else if (covering.every((constraint) => constraint.verdictConservative === "comfortable")) {
-        timePressure = Math.min(timePressure, 1);
-      }
-    }
-    return {
-      ...step,
-      demands: {
-        ...step.demands,
-        timePressure,
-        contextSwitch:
-          index > 0 && step.environment.trim() !== steps[index - 1].environment.trim(),
-      },
-    };
-  });
+  const stillConstrainedStepIds = new Set(
+    timeConstraints.flatMap((constraint) => constraint.stepIds)
+  );
+  const relaxedConstraintIds = new Set(
+    analyzeTiming({ ...source, steps, timeConstraints }).constraints
+      .filter(
+        (constraint) =>
+          replacementLimits.has(constraint.id) &&
+          constraint.verdictConservative === "comfortable"
+      )
+      .map((constraint) => constraint.id)
+  );
+  const relaxedStepIds = new Set(
+    timeConstraints
+      .filter((constraint) => relaxedConstraintIds.has(constraint.id))
+      .flatMap((constraint) => constraint.stepIds)
+  );
+  const pressuredByAnotherConstraint = new Set(
+    timeConstraints
+      .filter((constraint) => !relaxedConstraintIds.has(constraint.id))
+      .flatMap((constraint) => constraint.stepIds)
+  );
+  steps = steps.map((step, index) => ({
+    ...step,
+    demands: {
+      ...step.demands,
+      timePressure:
+        (removedStepIds.has(step.id) && !stillConstrainedStepIds.has(step.id))
+          ? 0
+          : relaxedStepIds.has(step.id) &&
+              !pressuredByAnotherConstraint.has(step.id) &&
+              step.demands.timePressure >= 2
+            ? 1
+            : step.demands.timePressure,
+      contextSwitch:
+        index > 0 && step.environment.trim() !== steps[index - 1].environment.trim(),
+    },
+  }));
 
   const analysis: Analysis = { ...source, steps, timeConstraints };
   const frictionResolutions = source.frictionMoments.map((moment) =>
@@ -329,42 +325,4 @@ export function applyRepairs(
 export function outstandingRepairs(analysis: Analysis, appliedStepIds: readonly string[]): number {
   const applied = new Set(appliedStepIds);
   return analysis.steps.filter((step) => step.repair !== null && !applied.has(step.id)).length;
-}
-
-/**
- * Whether this step's proposed repair acts on the barrier a finding names.
- * Used to pick which repair to show beside a finding: a response-alternative
- * repair must not be offered as the fix for a context-switching finding just
- * because both name the same step.
- */
-export function repairTargetsFinding(source: Analysis, moment: FrictionMoment, step: Step): boolean {
-  if (step.repair === null) return false;
-  const effects = step.repair.effects;
-  switch (moment.barrierType) {
-    case "working_memory":
-      return (effects.keepsInfoVisible && keepVisibleTarget(step) !== "none") || effects.reducesWorkingMemory;
-    case "context_switching":
-      return effects.replacementEnvironment !== null;
-    case "fine_motor":
-      return effects.reducesFineMotor;
-    case "reading_load":
-      return effects.reducesReadingLoad;
-    case "single_modality_communication":
-      return effects.addsResponseAlternative;
-    case "sensory_color_only":
-      return effects.addsNonColorCue;
-    case "sensory_audio_only":
-      return effects.addsCaptionOrTranscript;
-    case "navigation_ambiguity":
-      return true;
-    case "time_pressure": {
-      const ids = new Set(moment.stepIds);
-      const covering = new Set(
-        source.timeConstraints
-          .filter((constraint) => constraint.stepIds.some((stepId) => ids.has(stepId)))
-          .map((constraint) => constraint.id)
-      );
-      return timeConstraintChangesOf(effects).some((change) => covering.has(change.constraintId));
-    }
-  }
 }

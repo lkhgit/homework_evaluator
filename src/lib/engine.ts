@@ -29,12 +29,7 @@ const RESPONSE_STEP_EXTRA_SECONDS = 60;
 export interface CarriedItem {
   id: string;
   producedAtStepId: string;
-  /** The last step that needs the item from memory. */
   consumedAtStepId: string;
-  /** Every step that needs the item from memory, in task order. A finding
-   *  about an earlier consumer must still see its edge when a later step
-   *  also uses the item. */
-  consumedAtStepIds: string[];
   stepsCarried: number;
   switchesCrossed: number;
   decayRisk: boolean;
@@ -101,56 +96,36 @@ function round(value: number, places = 1): number {
 
 /**
  * Liveness analysis over the information-dependency graph, the same shape as a
- * compiler's live-variable pass. Each consume binds to the most recent earlier
- * step that produced the item (its reaching definition), so producing an id
- * again starts a new value. A value is live from its producing step through
- * the last step that needs it from memory, and only counts against working
- * memory when its producing step does not keep it visible. A consumer whose
- * repair shows the value at that step (`referencedItems`) does not need it
- * from memory.
+ * compiler's live-variable pass. An item is live from the step that produces it
+ * through the last step that consumes it; it only counts against working memory
+ * when the producing step does not keep it visible.
  */
 export function analyzeMemory(steps: Step[]): MemoryReport {
-  // One definition per (item, producing step). Producing an id again starts a
-  // new value, so a later consumer binds to the most recent earlier producer.
-  interface Definition {
-    item: string;
-    start: number;
-    visible: boolean;
-    consumers: number[];
-  }
-  const definitions: Definition[] = [];
-  const current = new Map<string, Definition>();
+  const producedAt = new Map<string, number>();
+  const staysVisible = new Map<string, boolean>();
+  const lastConsumedAt = new Map<string, number>();
 
   steps.forEach((step, index) => {
-    for (const item of step.consumes) {
-      // A step that produces the item itself does not need it from earlier.
-      if (step.produces.includes(item)) continue;
-      const definition = current.get(item);
-      if (!definition) continue;
-      // Shown on screen at this step (a consumer-side reference repair), so
-      // the student does not have to bring it here from memory.
-      if (step.referencedItems?.includes(item)) continue;
-      definition.consumers.push(index);
-    }
     for (const item of step.produces) {
-      const definition: Definition = {
-        item,
-        start: index,
-        visible: step.producedInfoStaysVisible,
-        consumers: [],
-      };
-      definitions.push(definition);
-      current.set(item, definition);
+      if (!producedAt.has(item)) {
+        producedAt.set(item, index);
+        staysVisible.set(item, step.producedInfoStaysVisible);
+      }
     }
   });
 
-  const live: Array<{ item: string; start: number; end: number }> = [];
+  steps.forEach((step, index) => {
+    for (const item of step.consumes) {
+      const origin = producedAt.get(item);
+      if (origin === undefined || index <= origin) continue;
+      lastConsumedAt.set(item, index);
+    }
+  });
+
   const carried: CarriedItem[] = [];
-  for (const definition of definitions) {
-    if (definition.visible || definition.consumers.length === 0) continue;
-    const { item, start } = definition;
-    const end = definition.consumers[definition.consumers.length - 1];
-    live.push({ item, start, end });
+  for (const [item, end] of lastConsumedAt) {
+    const start = producedAt.get(item)!;
+    if (staysVisible.get(item)) continue;
 
     let switchesCrossed = 0;
     for (let i = start + 1; i <= end; i++) {
@@ -161,7 +136,6 @@ export function analyzeMemory(steps: Step[]): MemoryReport {
       id: item,
       producedAtStepId: steps[start].id,
       consumedAtStepId: steps[end].id,
-      consumedAtStepIds: definition.consumers.map((index) => steps[index].id),
       stepsCarried: end - start,
       switchesCrossed,
       decayRisk: switchesCrossed >= 1,
@@ -169,9 +143,13 @@ export function analyzeMemory(steps: Step[]): MemoryReport {
   }
 
   const perStep: StepMemoryLoad[] = steps.map((step, index) => {
-    const liveItems = live
-      .filter((entry) => index >= entry.start && index <= entry.end)
-      .map((entry) => entry.item);
+    const liveItems = carried
+      .filter((item) => {
+        const start = producedAt.get(item.id)!;
+        const end = lastConsumedAt.get(item.id)!;
+        return index >= start && index <= end;
+      })
+      .map((item) => item.id);
 
     return {
       stepId: step.id,
@@ -314,131 +292,6 @@ export function analyzeTiming(analysis: Analysis): TimingReport {
     verdict: worst("verdict"),
     verdictConservative: worst("verdictConservative"),
   };
-}
-
-/**
- * Whether a step still carries a demand the engine and repair checks treat as
- * a barrier. Uses the same thresholds as repair verification so a repair that
- * removes the demand also removes the charge, and one that does not, does not.
- * Timing and switching are scored at task level and are not repeated here.
- */
-export function stepCarriesMeasuredBurden(
-  step: Step,
-  overCapacityStepIds: ReadonlySet<string> = new Set()
-): boolean {
-  const { demands } = step;
-  return (
-    overCapacityStepIds.has(step.id) ||
-    demands.workingMemory >= 2 ||
-    demands.fineMotor >= 2 ||
-    demands.readingLoad >= 2 ||
-    (demands.communication !== "none" && demands.communication !== "multiple") ||
-    demands.sensory.colorOnly ||
-    demands.sensory.audioOnly
-  );
-}
-
-/**
- * The one rule for "a stated timer is pressing on this step", shared by the
- * processing-time condition, finding resolution and timer relaxation so the
- * three can never disagree.
- *
- * Policy (conservative-only): a step is pressured only when a timer the
- * assignment states covers it and a slower reader would not finish
- * comfortably inside that timer. The model's per-step timePressure rating is
- * not used: a comfortable timer that cannot be paused may still be worth an
- * educator's attention, but that is a qualitative judgement, not a measured
- * processing-time barrier, so such a finding is reported as unverified.
- */
-export function timerPressesOn(step: Step, timing: TimingReport): boolean {
-  return timing.constraints.some(
-    (constraint) =>
-      constraint.stepIds.includes(step.id) && constraint.verdictConservative !== "comfortable"
-  );
-}
-
-export interface ScoreDeduction {
-  label: string;
-  points: number;
-}
-
-export interface AccessibilityScore {
-  score: number;
-  breakdown: ScoreDeduction[];
-}
-
-/**
- * A single figure for how much task-level friction the design carries. It is
- * computed deterministically from the measurements above, but its inputs are
- * not all measurements: demand levels, goal relevance, severity and the step
- * and timer structure come from the model's reading of the assignment, and
- * the weights are product heuristics. The breakdown is surfaced in the
- * interface so any figure can be traced back to the thing that caused it.
- *
- * Deliberately not a compliance score: it says nothing about WCAG conformance.
- */
-export function scoreAccessibility(
-  report: EngineReport,
-  analysis: Analysis,
-  resolvedFrictionIds: ReadonlySet<string> = new Set()
-): AccessibilityScore {
-  const breakdown: ScoreDeduction[] = [];
-  const deduct = (label: string, points: number) => {
-    if (points > 0) breakdown.push({ label, points: -points });
-  };
-
-  const overCapacity = Math.max(0, report.memory.peakLoad - report.memory.capacity);
-  deduct(
-    `최대 기억 부하 ${report.memory.peakLoad}개 항목(용량 약 ${report.memory.capacity}개 초과)`,
-    overCapacity * 8
-  );
-
-  const decaying = report.memory.carried.filter((item) => item.decayRisk).length;
-  deduct(
-    `환경을 바꿀 때 도움 없이 기억해야 하는 값 ${decaying}개`,
-    decaying * 5
-  );
-
-  const extraSwitches = Math.max(0, report.switching.transitions - 3);
-  deduct(`도구 전환 ${report.switching.transitions}회`, extraSwitches * 3);
-
-  if (report.timing.verdict === "infeasible") {
-    deduct("제한 시간이 과제에 필요한 시간보다 짧음", 15);
-  } else if (report.timing.verdict === "tight") {
-    deduct("제한 시간에 여유가 거의 없음", 8);
-  }
-  if (
-    report.timing.verdict !== "infeasible" &&
-    report.timing.verdictConservative === "infeasible"
-  ) {
-    deduct("읽기 속도가 느린 학생은 시간이 부족할 수 있음", 5);
-  }
-
-  const activeFriction = analysis.frictionMoments.filter(
-    (friction) => !resolvedFrictionIds.has(friction.id)
-  );
-  const high = activeFriction.filter((f) => f.severity === "high").length;
-  const medium = activeFriction.filter((f) => f.severity === "medium").length;
-  deduct(`심각도 높은 문제 지점 ${high}개`, high * 4);
-  deduct(`심각도 보통인 문제 지점 ${medium}개`, medium * 2);
-
-  // Charged for the burden a step still measurably carries, not for whether a
-  // repair proposal happens to be attached. Accepting a repair clears the
-  // proposal, so counting proposals let a repair that changed nothing raise the
-  // score while every measurement stayed the same.
-  const overCapacitySteps = new Set(report.memory.overCapacityStepIds);
-  const incidental = analysis.steps.filter(
-    (step) =>
-      step.goalRelevance === "incidental" &&
-      stepCarriesMeasuredBurden(step, overCapacitySteps)
-  ).length;
-  deduct(
-    `목표와 무관한 단계에 남아 있는 측정된 부담 ${incidental}개`,
-    incidental * 2
-  );
-
-  const total = breakdown.reduce((sum, item) => sum + item.points, 0);
-  return { score: Math.max(0, Math.min(100, 100 + total)), breakdown };
 }
 
 /**

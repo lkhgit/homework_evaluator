@@ -1,7 +1,5 @@
 import { z } from "zod";
 
-import { REQUEST_LIMITS } from "./requestLimits";
-
 /**
  * The task graph is the contract between the model and the rest of Homework evaluator.
  * The model's only job is turning assignment prose into this shape; every number
@@ -390,40 +388,35 @@ export const repairProposalsSchema = z.object({
 export type TaskGraph = z.infer<typeof taskGraphSchema>;
 export type RepairProposals = z.infer<typeof repairProposalsSchema>;
 
-// Request bodies are bounded so no caller can push an arbitrary amount of text
-// into a model prompt. The model-output schemas above stay unbounded so the
-// grammar sent to the model is unchanged.
-const L = REQUEST_LIMITS;
-
 export const objectiveRequestSchema = z.object({
-  assignmentText: z.string().trim().min(40).max(L.assignmentChars),
+  assignmentText: z.string().trim().min(40),
 });
 
 export const analysisRequestSchema = objectiveRequestSchema.extend({
-  lockedObjective: z.string().trim().min(1).max(L.objectiveChars),
+  lockedObjective: z.string().trim().min(1),
 });
 
 export const acceptedRepairSchema = z.object({
-  action: z.string().trim().min(1).max(L.repairFieldChars),
-  suggestion: z.string().trim().min(1).max(L.suggestionChars),
-  rigorNote: z.string().trim().min(1).max(L.repairFieldChars),
+  action: z.string().trim().min(1),
+  suggestion: z.string().trim().min(1),
+  rigorNote: z.string().trim().min(1),
 });
 
 export const previewStepSchema = z.object({
-  id: z.string().trim().min(1).max(L.stepIdChars),
-  action: z.string().trim().min(1).max(L.repairFieldChars),
+  id: z.string().trim().min(1),
+  action: z.string().trim().min(1),
 });
 
 export const previewRequestSchema = analysisRequestSchema.extend({
-  repairs: z.array(acceptedRepairSchema).min(1).max(L.repairs),
-  steps: z.array(previewStepSchema).max(L.steps).default([]),
+  repairs: z.array(acceptedRepairSchema).min(1),
+  steps: z.array(previewStepSchema).default([]),
 });
 
 export const repairClassificationRequestSchema = z.object({
-  lockedObjective: z.string().trim().min(1).max(L.objectiveChars),
-  analysis: analysisSchema.extend({ steps: z.array(stepSchema).max(L.steps) }),
-  stepId: z.string().trim().min(1).max(L.stepIdChars),
-  suggestion: z.string().trim().min(1).max(L.suggestionChars),
+  lockedObjective: z.string().trim().min(1),
+  analysis: analysisSchema,
+  stepId: z.string().trim().min(1),
+  suggestion: z.string().trim().min(1),
 });
 
 export type RevisedAssignment = z.infer<typeof revisedAssignmentSchema>;
@@ -455,15 +448,10 @@ export function timeConstraintChangesOf(
     },
   ];
 }
-/**
- * A step as the app holds it. `referencedItems` is never requested from the
- * model: only applyRepairs sets it, when an accepted keep-visible repair sits
- * on a step that uses earlier values rather than producing them.
- */
-export type Step = z.infer<typeof stepSchema> & { referencedItems?: string[] };
+export type Step = z.infer<typeof stepSchema>;
 export type FrictionMoment = z.infer<typeof frictionMomentSchema>;
 export type TimeConstraint = z.infer<typeof timeConstraintSchema>;
-export type Analysis = Omit<z.infer<typeof analysisSchema>, "steps"> & { steps: Step[] };
+export type Analysis = z.infer<typeof analysisSchema>;
 export type BarrierType = z.infer<typeof barrierTypeSchema>;
 export type GoalRelevance = z.infer<typeof goalRelevanceSchema>;
 export type ObjectiveCandidate = z.infer<typeof objectiveCandidateSchema>;
