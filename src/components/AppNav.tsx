@@ -1,6 +1,7 @@
 "use client";
 
 import { Check } from "lucide-react";
+import Link from "next/link";
 import type { WorkflowStage } from "@/components/WorkflowContext";
 
 const PROGRESS = [
@@ -35,9 +36,9 @@ export default function AppNav({ stage, visited, onNavigate }: AppNavProps) {
 
   return (
     <header className="app-nav">
-      <div className="brand-lockup" aria-label="Homework evaluator">
+      <Link href="/" className="brand-lockup" aria-label="Homework evaluator, 화면 선택으로">
         <span>Homework evaluator</span>
-      </div>
+      </Link>
 
       <nav aria-label="분석 진행 단계" className="progress-nav">
         <ol>
@@ -53,7 +54,7 @@ export default function AppNav({ stage, visited, onNavigate }: AppNavProps) {
                 <span className="progress-number" aria-hidden="true">
                   {complete ? <Check size={11} strokeWidth={2.4} /> : item.number}
                 </span>
-                <span>{item.label}</span>
+                <span className="progress-label">{item.label}</span>
               </>
             );
 
@@ -84,9 +85,7 @@ export default function AppNav({ stage, visited, onNavigate }: AppNavProps) {
         </ol>
       </nav>
 
-      <div className="profile-avatar" aria-label="사용자 프로필">
-        나
-      </div>
+      <Link href="/student" className="mode-switch">학생용 보기</Link>
     </header>
   );
 }

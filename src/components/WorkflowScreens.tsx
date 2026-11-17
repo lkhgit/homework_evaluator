@@ -33,6 +33,7 @@ import { locateEvidence } from "@/lib/evidenceGuard";
 import { timeConstraintChangesOf } from "@/lib/schema";
 import type { Analysis, FrictionMoment, GoalRelevance, RepairEffects, RevisedAssignment, Step } from "@/lib/schema";
 import { diffWords, type DiffSegment } from "@/lib/textDiff";
+import { readStored, writeStored } from "@/lib/browserStore";
 
 function ScreenHeading({
   eyebrow,
@@ -62,6 +63,7 @@ function ArrowButton({ children, onClick, disabled = false }: { children: React.
 }
 
 export interface AnalyzeScreenProps {
+  projectId?: string;
   text: string;
   onChange: (value: string) => void;
   onSubmit: () => void;
@@ -69,24 +71,35 @@ export interface AnalyzeScreenProps {
   hasAnalysis?: boolean;
 }
 
-export function AnalyzeScreen({ text, onChange, onSubmit, hasAnalysis = false }: AnalyzeScreenProps) {
+export function AnalyzeScreen({ text, onChange, onSubmit, hasAnalysis = false, projectId = "first-project" }: AnalyzeScreenProps) {
+  const [fileNote, setFileNote] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
+  const [originals, setOriginals] = useState<File[]>([]);
+  useEffect(() => {
+    let active = true;
+    readStored<File[]>(`teacher-files:${projectId}`).then(files => { if (active) setOriginals(files ?? []); }).catch(() => { if (active) setFileNote({ tone: "error", text: "원본 자료를 불러오지 못했습니다." }); });
+    return () => { active = false; };
+  }, [projectId]);
   const fileInput = useRef<HTMLInputElement>(null);
   const [reading, setReading] = useState(false);
-  const [fileNote, setFileNote] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
 
   async function handleFile(event: React.ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
+    const files = Array.from(event.target.files ?? []);
     event.target.value = "";
-    if (!file) return;
+    if (!files.length) return;
 
     setReading(true);
     setFileNote(null);
     try {
-      const { extractPdfText } = await import("@/lib/pdfText");
-      const extracted = await extractPdfText(file);
-      onChange(extracted);
-      const words = extracted.split(/\s+/).length;
-      setFileNote({ tone: "ok", text: `${file.name}에서 단어 ${words.toLocaleString()}개를 읽었습니다. 아래에서 확인한 뒤 분석하세요.` });
+      const form = new FormData();
+      files.forEach(file => form.append("files", file));
+      const response = await fetch("/api/extract", { method: "POST", body: form });
+      const extracted = await response.json();
+      if (!response.ok) throw new Error(extracted.error || "자료를 읽을 수 없습니다.");
+      const next = [...originals, ...files];
+      await writeStored(`teacher-files:${projectId}`, next);
+      setOriginals(next);
+      onChange([text, extracted.text].filter(Boolean).join("\n\n"));
+      setFileNote({ tone: "ok", text: `${files.length}개 자료를 읽었습니다. AI가 읽은 내용과 수치는 원본과 비교해 주세요.` });
     } catch (error) {
       setFileNote({
         tone: "error",
@@ -122,7 +135,7 @@ export function AnalyzeScreen({ text, onChange, onSubmit, hasAnalysis = false }:
               onClick={() => fileInput.current?.click()}
               disabled={reading}
             >
-              <Upload size={15} aria-hidden="true" /> {reading ? "PDF 읽는 중…" : "PDF 업로드"}
+              <Upload size={15} aria-hidden="true" /> {reading ? "자료 읽는 중…" : "PDF·이미지 업로드"}
             </button>
             <button type="button" role="tab" aria-selected="false" disabled>
               <Link2 size={15} aria-hidden="true" /> URL 입력 <span>준비 중</span>
@@ -131,9 +144,10 @@ export function AnalyzeScreen({ text, onChange, onSubmit, hasAnalysis = false }:
           <input
             ref={fileInput}
             type="file"
-            accept="application/pdf,.pdf"
+            accept="application/pdf,.pdf,image/png,image/jpeg"
+            multiple
             className="sr-only"
-            aria-label="PDF 과제 업로드"
+            aria-label="PDF 또는 이미지 업로드"
             onChange={handleFile}
           />
           {fileNote && (
@@ -144,10 +158,12 @@ export function AnalyzeScreen({ text, onChange, onSubmit, hasAnalysis = false }:
               {fileNote.text}
             </p>
           )}
+          {originals.length > 0 && <details><summary>원본 자료 ({originals.length})</summary><ul>{originals.map((file, index) => <li key={index}>{file.name} <button type="button" onClick={() => { const url = URL.createObjectURL(file); const link = document.createElement("a"); link.href = url; link.download = file.name; link.click(); window.setTimeout(() => URL.revokeObjectURL(url), 1000); }}>원본 내려받기</button></li>)}</ul><button type="button" onClick={() => { writeStored(`teacher-files:${projectId}`, []).then(() => setOriginals([])).catch(() => setFileNote({ tone: "error", text: "원본 자료를 삭제하지 못했습니다." })); }}>저장된 원본 삭제</button></details>}
           <label htmlFor="assignment-text" className="sr-only">과제 내용</label>
           <textarea
             id="assignment-text"
             value={text}
+            disabled={reading}
             onChange={(event) => onChange(event.target.value)}
             spellCheck={false}
             aria-describedby="prototype-note"
