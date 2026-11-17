@@ -15,7 +15,7 @@ export async function readStored<T>(key: string): Promise<T | undefined> {
     request.onerror = () => reject(request.error);
   }); } finally { db.close(); }
 }
-export async function writeStored(key: string, value: unknown): Promise<void> {
+async function write(key: string, value: unknown): Promise<void> {
   const db = await open();
   try { await new Promise<void>((resolve, reject) => {
     const transaction = db.transaction("data", "readwrite");
@@ -24,4 +24,30 @@ export async function writeStored(key: string, value: unknown): Promise<void> {
     transaction.onerror = () => reject(transaction.error);
     transaction.onabort = () => reject(transaction.error);
   }); } finally { db.close(); }
+}
+
+let resetting = false;
+const pending = new Set<Promise<void>>();
+export function writeStored(key: string, value: unknown): Promise<void> {
+  if (resetting) return Promise.resolve();
+  const operation = write(key, value);
+  pending.add(operation);
+  void operation.then(() => pending.delete(operation), () => pending.delete(operation));
+  return operation;
+}
+
+export async function resetStored(): Promise<void> {
+  if (resetting) throw new Error("초기화가 진행 중입니다.");
+  resetting = true;
+  try {
+    await Promise.allSettled([...pending]);
+    const db = await open();
+    try { await new Promise<void>((resolve, reject) => {
+      const transaction = db.transaction("data", "readwrite");
+      transaction.objectStore("data").clear();
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error);
+      transaction.onabort = () => reject(transaction.error);
+    }); } finally { db.close(); }
+  } catch (error) { resetting = false; throw error; }
 }

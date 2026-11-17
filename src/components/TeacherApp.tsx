@@ -3,7 +3,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, CheckCircle2 } from "lucide-react";
 
+import { readStored } from "@/lib/browserStore";
+import ErrorBanner from "@/components/ErrorBanner";
 import AppNav from "@/components/AppNav";
+import AnalysisNotice from "@/components/AnalysisNotice";
+import { teacherNotices } from "@/lib/teacherNotices";
 import TeacherRevision from "@/components/TeacherRevision";
 import TeacherHistory from "@/components/TeacherHistory";
 import type { TeacherSnapshot } from "@/lib/teacherSnapshot";
@@ -36,11 +40,8 @@ import {
 import { buildStudentHandout, downloadHtml, handoutFilename } from "@/lib/studentHandout";
 import { applyRepairs } from "@/lib/repairs";
 import type { Analysis, FrictionMoment, RevisedAssignment, Step } from "@/lib/schema";
-import { BIOLOGY_SAMPLE, BIOLOGY_TEXT } from "@/samples/biology";
+import { BIOLOGY_SAMPLE } from "@/samples/biology";
 import type { StudentAnalysis } from "@/lib/studentAnalysis";
-
-/** Keeps the loading sequence readable when a cached sample resolves instantly. */
-const MIN_LOADING_MS = 2400;
 
 function describeError(error: unknown): string {
   if (error instanceof AnalysisUnavailableError) return error.message;
@@ -64,8 +65,9 @@ const STATUS_LABEL: Record<WorkflowStage, string> = {
 export default function Home() {
   const [projectId, setProjectId] = useState("first-project");
   const [stage, setStage] = useState<WorkflowStage>("analyze");
-  const [assignmentDraft, setAssignmentDraft] = useState(BIOLOGY_TEXT);
-  const [analyzedText, setAnalyzedText] = useState(BIOLOGY_TEXT);
+  const [assignmentDraft, setAssignmentDraft] = useState("");
+  const [analyzedDraft, setAnalyzedDraft] = useState("");
+  const [analyzedText, setAnalyzedText] = useState("");
   const [objective, setObjective] = useState(BIOLOGY_SAMPLE.objectives[0].text);
   const [baseAnalysis, setBaseAnalysis] = useState<Analysis>(BIOLOGY_SAMPLE.analysis);
   const [steps, setSteps] = useState<Step[]>(BIOLOGY_SAMPLE.analysis.steps);
@@ -151,11 +153,11 @@ export default function Home() {
 
   useEffect(() => {
     if (stage === "intro") return;
-    const timer = window.setTimeout(() => {
+    const timer = window.requestAnimationFrame(() => {
       document.querySelector<HTMLElement>("[data-screen-heading]")?.focus({ preventScroll: true });
-      window.scrollTo({ top: 0, behavior: "smooth" });
-    }, 40);
-    return () => window.clearTimeout(timer);
+      window.scrollTo({ top: 0, behavior: "auto" });
+    });
+    return () => window.cancelAnimationFrame(timer);
   }, [stage]);
 
   function addRepair(stepId: string) {
@@ -196,7 +198,7 @@ export default function Home() {
 
   /** Reads the assignment and proposes a learning objective for the educator to lock. */
   async function submitAssignment() {
-    const text = assignmentDraft;
+    let text = assignmentDraft;
     const token = ++requestId.current;
     setError(null);
     setAppliedRepairIds([]);
@@ -211,12 +213,18 @@ export default function Home() {
     goToStage("loading");
 
     try {
-      const [objectives] = await Promise.all([
-        extractObjectives(text),
-        new Promise((resolve) => setTimeout(resolve, MIN_LOADING_MS)),
-      ]);
+      const files = await readStored<File[]>(`teacher-files:${projectId}`) ?? [];
+      if (files.length) {
+        const form = new FormData(); files.forEach(file => form.append("files", file));
+        const response = await fetch("/api/extract", { method: "POST", body: form });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "자료를 읽지 못했습니다.");
+        text = [text, data.text].filter(Boolean).join("\n\n");
+      }
+      const objectives = await extractObjectives(text, files);
       if (token !== requestId.current) return;
       setAnalyzedText(text);
+      setAnalyzedDraft(assignmentDraft);
       setObjective(objectives[0]?.text ?? "");
       goToStage("goal");
     } catch (err) {
@@ -238,14 +246,16 @@ export default function Home() {
       const conflictCheck = async () => {
         const body = new FormData();
         body.append("text", analyzedText);
+        const files = await readStored<File[]>(`teacher-files:${projectId}`) ?? [];
+        files.forEach(file => body.append("files", file));
         const response = await fetch("/api/student", { method: "POST", body });
         if (!response.ok) throw new Error("자료 간 충돌을 확인하지 못했습니다. 원본을 직접 확인해 주세요.");
         return await response.json() as StudentAnalysis;
       };
+      const files = await readStored<File[]>(`teacher-files:${projectId}`) ?? [];
       const [result, check] = await Promise.all([
-        analyzeAssignment(analyzedText, lockedObjective),
+        analyzeAssignment(analyzedText, lockedObjective, files),
         conflictCheck().then(value => ({ value }), () => ({ value: null })),
-        new Promise((resolve) => setTimeout(resolve, MIN_LOADING_MS)),
       ]);
       if (token !== requestId.current) return;
       setBaseAnalysis(result.analysis);
@@ -269,8 +279,9 @@ export default function Home() {
   const startOver = useCallback(() => {
     requestId.current++;
     setProjectId(crypto.randomUUID());
-    setAssignmentDraft(BIOLOGY_TEXT);
-    setAnalyzedText(BIOLOGY_TEXT);
+    setAssignmentDraft("");
+    setAnalyzedText("");
+    setAnalyzedDraft("");
     setObjective(BIOLOGY_SAMPLE.objectives[0].text);
     setBaseAnalysis(BIOLOGY_SAMPLE.analysis);
     setSteps(BIOLOGY_SAMPLE.analysis.steps);
@@ -281,6 +292,7 @@ export default function Home() {
     setRevised(null);
     setVisited(new Set(["analyze"]));
     setAnalysisWarnings([]);
+    setSourceConflicts([]);
     goToStage("analyze");
   }, [goToStage]);
 
@@ -297,11 +309,11 @@ export default function Home() {
     return repair?.rigorPreserved !== false;
   });
 
-  const snapshot: TeacherSnapshot = { projectId, stage, assignmentDraft, analyzedText, objective, baseAnalysis, steps, appliedRepairIds, revised, visited: [...visited], selectedFriction, condition, analysisWarnings, sourceConflicts };
+  const snapshot: TeacherSnapshot = { projectId, stage, assignmentDraft, analyzedText, analyzedDraft, objective, baseAnalysis, steps, appliedRepairIds, revised, visited: [...visited], selectedFriction, condition, analysisWarnings, sourceConflicts };
   const history = <TeacherHistory snapshot={snapshot} onRestore={value => {
     requestId.current++;
     setProjectId(value.projectId); setStage(value.stage === "loading" ? "analyze" : value.stage);
-    setAssignmentDraft(value.assignmentDraft); setAnalyzedText(value.analyzedText); setObjective(value.objective);
+    setAssignmentDraft(value.assignmentDraft); setAnalyzedText(value.analyzedText); setAnalyzedDraft(value.analyzedDraft ?? value.analyzedText); setObjective(value.objective);
     setBaseAnalysis(value.baseAnalysis); setSteps(value.steps); setAppliedRepairIds(value.appliedRepairIds);
     setRevised(value.revised); setVisited(new Set(value.visited)); setSelectedFriction(value.selectedFriction);
     setCondition(value.condition); setAnalysisWarnings(value.analysisWarnings); setSourceConflicts(value.sourceConflicts); setError(null);
@@ -311,22 +323,13 @@ export default function Home() {
     <WorkflowProvider value={workflowActions}>
       <div className="app-shell">
         <AppNav stage={stage} visited={visited} onNavigate={navigateFromNav} />
-        {history}
         {stage === "intro" && <IntroScreen onEnter={() => goToStage("analyze")} />}
         <p className="sr-only" aria-live="polite">{STATUS_LABEL[stage]}</p>
 
         {error && (
-          <p role="alert" className="workflow-error">
-            {error}
-          </p>
+          <ErrorBanner message={error} />
         )}
-        {analysisWarnings.length > 0 && (
-          <aside className="workflow-warning" aria-label="분석 품질 경고">
-            <strong>측정 전에 모델이 만든 일부 관계가 자동으로 정리되었습니다.</strong>
-            <ul>{analysisWarnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>
-          </aside>
-        )}
-        {sourceConflicts.length > 0 && <aside role="alert" className="student-warning"><strong>자료 간 충돌을 확인해 주세요</strong>{sourceConflicts.map((conflict, i) => <div key={i}><p>{conflict.description}</p><ul>{conflict.sources.map((source, j) => <li key={j}>{source.file}{source.page ? ` ${source.page}쪽` : ""}: {source.quote}</li>)}</ul></div>)}</aside>}
+        <AnalysisNotice key={JSON.stringify([projectId, analysisWarnings, sourceConflicts])} messages={teacherNotices(analysisWarnings, sourceConflicts)} />
 
         <div className="screen-enter" key={stage}>
           {stage === "analyze" && (
@@ -338,7 +341,7 @@ export default function Home() {
               hasAnalysis={visited.has("journey")}
             />
           )}
-          {stage === "loading" && <AnalysisLoadingScreen phase={loadingPhase} />}
+          {stage === "loading" && <AnalysisLoadingScreen phase={loadingPhase} onCancel={() => navigateFromNav(loadingPhase === "analysis" ? "goal" : "analyze")} />}
           {stage === "goal" && <GoalLockScreen objective={objective} onEdit={setObjective} onLock={() => lockAndAnalyze(objective)} />}
           {stage === "journey" && (
             <>
@@ -348,6 +351,8 @@ export default function Home() {
                 setAssignmentDraft(next);
                 setAppliedRepairIds([]);
                 setRevised(null);
+                setAnalysisWarnings([]);
+                setSourceConflicts([]);
                 setVisited(new Set(["analyze"]));
                 goToStage("analyze");
               }} />
@@ -367,14 +372,14 @@ export default function Home() {
                   <div className="journey-clear">
                     <p>
                       <CheckCircle2 size={17} aria-hidden="true" />
-                      어려움이 발견되지 않았습니다. 다만 점수 내역에는 개별적으로 측정된 부담이 여전히 표시될 수 있습니다.
+                      예상되는 어려움이 없습니다. 접근 조건도 확인해 보세요.
                     </p>
                     <button
                       type="button"
                       className="button button--primary"
                       onClick={() => goToStage("constraint")}
                     >
-                      접근성 조건 테스트하기 <ArrowRight size={17} aria-hidden="true" />
+                      접근 조건 확인하기 <ArrowRight size={17} aria-hidden="true" />
                     </button>
                   </div>
                 )}
@@ -428,6 +433,7 @@ export default function Home() {
             />
           )}
         </div>
+        {history}
       </div>
     </WorkflowProvider>
   );

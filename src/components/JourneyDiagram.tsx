@@ -86,7 +86,7 @@ const JourneyDiagram = forwardRef<HTMLDivElement, JourneyDiagramProps>(function 
               <path d={`M ${timer.x1} ${timer.y + 8} V ${timer.y} H ${timer.x2} V ${timer.y + 8}`} />
               <text x={timer.x1 + 8} y={timer.y - 5}>
                 타이머 {timer.limitMinutes}분
-                {timer.verdict === "infeasible" ? " · 시간 부족" : timer.verdict === "tight" ? " · 빠듯함" : ""}
+                {timer.verdict === "infeasible" ? " (시간 부족)" : timer.verdict === "tight" ? " (빠듯함)" : ""}
               </text>
             </g>
           ))}

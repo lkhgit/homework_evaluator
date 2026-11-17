@@ -1,4 +1,5 @@
 "use client";
+import ErrorBanner from "./ErrorBanner";
 import { useEffect, useRef, useState } from "react";
 import { readStored, writeStored } from "@/lib/browserStore";
 import { versionKey, type TeacherSnapshot } from "@/lib/teacherSnapshot";
@@ -31,18 +32,19 @@ export default function TeacherHistory({ snapshot, onRestore }: { snapshot: Teac
       setArchive(previous => {
         const versions = previous.projects[snapshot.projectId] ?? [];
         const last = versions.at(-1);
-        const complete = snapshot.visited.includes("journey") && snapshot.assignmentDraft === snapshot.analyzedText;
+        const complete = snapshot.visited.includes("journey") && snapshot.assignmentDraft === (snapshot.analyzedDraft ?? snapshot.analyzedText);
         const changed = complete && (!last || versionKey(last.snapshot) !== versionKey(snapshot));
-        const next = { current: snapshot, projects: { ...previous.projects, [snapshot.projectId]: changed ? [...versions, { label: last ? "과제·개선안 변경" : "최초 분석", date: new Date().toLocaleString("ko-KR"), snapshot }] : versions } };
+        const next = { current: snapshot, projects: { ...previous.projects, [snapshot.projectId]: changed ? [...versions, { label: last ? "과제와 개선안 변경" : "최초 분석", date: new Date().toLocaleString("ko-KR"), snapshot }] : versions } };
         persist(next);
         return next;
       });
     }, 300);
     return () => window.clearTimeout(timer);
   }, [ready, snapshot]);
-  return <details className="teacher-history"><summary>과제별 변경 이력</summary><p>이 브라우저에 저장됩니다. 브라우저 데이터를 삭제하면 사라집니다.</p>{error && <p role="alert">{error}</p>}{Object.entries(archive.projects).map(([id, versions]) => <section key={id}><h3>{versions[0]?.snapshot.analyzedText.slice(0, 50) || "분석 전 과제"}</h3><ol>{versions.map((version, index) => <li key={index}>{index + 1}. {version.label} · {version.date}<details><summary>과제 보기</summary><pre style={{ whiteSpace: "pre-wrap" }}>{version.snapshot.analyzedText}</pre></details><button type="button" onClick={() => {
+  const projects = Object.entries(archive.projects).filter(([, versions]) => versions.length > 0);
+  return <div className="teacher-history">{error && <ErrorBanner message={error} />}<details><summary>과제별 변경 이력</summary><p>이 브라우저에 저장됩니다. 브라우저 데이터를 삭제하면 사라집니다.</p>{projects.length === 0 && <p>분석을 마치면 과제와 수정 이력이 여기에 저장됩니다.</p>}{projects.map(([id, versions]) => <section key={id}><h3>{versions[0]?.snapshot.analyzedText.slice(0, 50) || "분석 전 과제"}</h3><ol>{versions.map((version, index) => <li key={index}>{index + 1}. {version.label}<time>{version.date}</time><details><summary>과제 보기</summary><pre style={{ whiteSpace: "pre-wrap" }}>{version.snapshot.analyzedText}</pre></details><button type="button" onClick={() => {
       const value = { ...version.snapshot, stage: "journey" as const };
       const next = { current: value, projects: { ...archive.projects, [id]: [...versions, { snapshot: value, label: `${index + 1}번 버전 복원`, date: new Date().toLocaleString("ko-KR") }] } };
       setArchive(next); persist(next); onRestore(value);
-    }}>이 상태로 돌아가기</button></li>)}</ol><button type="button" onClick={() => { const projects = { ...archive.projects }; delete projects[id]; const next = { ...archive, projects }; setArchive(next); persist(next); }}>이 과제의 이력 삭제</button></section>)}</details>;
+    }}>이 상태로 돌아가기</button></li>)}</ol><button type="button" className="destructive-action" onClick={() => { if (!window.confirm("이 과제의 저장된 이력을 모두 삭제할까요? 삭제한 이력은 복원할 수 없습니다.")) return; const projects = { ...archive.projects }; delete projects[id]; const next = { ...archive, projects }; setArchive(next); persist(next); }}>이 과제의 이력만 삭제</button></section>)}</details></div>;
 }

@@ -7,8 +7,8 @@ import type { StudentGuide } from "./studentGuide";
  * order settles every depth.
  */
 
-export const TREE_NODE_W = 210;
-export const TREE_NODE_H = 104;
+export const TREE_NODE_W = 230;
+export const TREE_NODE_H = 132;
 const COL_GAP = 64;
 const ROW_GAP = 18;
 const PAD = 20;

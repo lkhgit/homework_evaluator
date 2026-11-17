@@ -1,16 +1,30 @@
 import Link from "next/link";
-import { ArrowUpRight, BookOpen, ClipboardList } from "lucide-react";
+import { ArrowRight, BookOpen, ClipboardList } from "lucide-react";
+import WorkspaceHeader from "@/components/WorkspaceHeader";
 
 export default function Home() {
-  return <main className="role-choice">
-    <header className="workspace-brand">Homework evaluator<span>과제를 읽고, 다음 할 일을 찾다.</span></header>
-    <div className="role-choice__intro"><p className="eyebrow">시작하기</p>
-    <h1>어떤 도움이 필요한가요?</h1>
-    <p>받은 과제를 따라가거나, 학생에게 줄 과제를 다듬으세요.</p></div>
-    <div className="role-choice__links">
-      <Link href="/student"><BookOpen size={26} aria-hidden="true" /><small>학생</small><strong>과제 따라가기</strong><span>지침을 넣고, 준비부터 제출까지 해야 할 일을 순서대로 확인하세요.</span><b>학생용으로 시작 <ArrowUpRight size={18} aria-hidden="true" /></b></Link>
-      <Link href="/teacher"><ClipboardList size={26} aria-hidden="true" /><small>선생님</small><strong>과제 다듬기</strong><span>학생이 막힐 부분을 살펴보고 학습 목표에 맞게 지침을 개선하세요.</span><b>선생님용으로 시작 <ArrowUpRight size={18} aria-hidden="true" /></b></Link>
-    </div>
-    <footer>PDF·이미지·글로 된 과제 지침을 사용할 수 있습니다.</footer>
-  </main>;
+  return <>
+    <WorkspaceHeader />
+    <main className="role-choice" id="main-content">
+      <div className="screen-heading">
+        <h1>과제 준비부터 제출까지</h1>
+        <p>교사는 과제 지침을 점검하고, 학생은 해야 할 일을 확인합니다. 답안을 대신 작성하지 않습니다. 예시 적용으로 파일 없이 체험해 보세요.</p>
+      </div>
+      <div className="role-choice__links">
+        <Link href="/teacher">
+          <ClipboardList size={24} aria-hidden="true" />
+          <h2>교사용</h2>
+          <p>학생이 어려워할 부분을 찾고, 학습 목표에 맞게 과제 지침을 수정하세요.</p>
+          <span>과제 점검하기 <ArrowRight size={18} aria-hidden="true" /></span>
+        </Link>
+        <Link href="/student">
+          <BookOpen size={24} aria-hidden="true" />
+          <h2>학생용</h2>
+          <p>받은 과제를 넣고, 준비물과 해야 할 일, 제출 조건을 순서대로 확인하세요.</p>
+          <span>내 과제 시작하기 <ArrowRight size={18} aria-hidden="true" /></span>
+        </Link>
+      </div>
+      <footer>PDF, 이미지 또는 글로 된 과제 지침을 사용하세요.</footer>
+    </main>
+  </>;
 }

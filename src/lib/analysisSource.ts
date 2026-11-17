@@ -20,24 +20,25 @@ export interface AnalysisResult {
   warnings: string[];
 }
 
-export async function extractObjectives(text: string): Promise<ObjectiveCandidate[]> {
-  const sample = matchSample(text);
+export async function extractObjectives(text: string, files: File[] = []): Promise<ObjectiveCandidate[]> {
+  const sample = files.length ? undefined : matchSample(text);
   if (sample) return sample.objectives;
 
   const data = await post<{ objectives: ObjectiveCandidate[] }>("/api/objective", {
     assignmentText: text,
-  });
+  }, files);
   return data.objectives;
 }
 
 export async function analyzeAssignment(
   text: string,
-  lockedObjective: string
+  lockedObjective: string,
+  files: File[] = []
 ): Promise<AnalysisResult> {
-  const sample = matchSample(text);
+  const sample = files.length ? undefined : matchSample(text);
   if (sample) return { analysis: sample.analysis, warnings: [] };
 
-  return post<AnalysisResult>("/api/analyze", { assignmentText: text, lockedObjective });
+  return post<AnalysisResult>("/api/analyze", { assignmentText: text, lockedObjective }, files);
 }
 
 export async function classifyRepair(
@@ -80,11 +81,16 @@ export async function generatePreview(
   });
 }
 
-async function post<T>(url: string, body: unknown): Promise<T> {
+async function post<T>(url: string, body: unknown, files: File[] = []): Promise<T> {
+  const form = new FormData();
+  if (files.length) {
+    Object.entries(body as Record<string, string>).forEach(([key, value]) => form.append(key, value));
+    files.forEach(file => form.append("files", file));
+  }
   const response = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+    headers: files.length ? undefined : { "Content-Type": "application/json" },
+    body: files.length ? form : JSON.stringify(body),
   }).catch(() => null);
 
   if (!response) {

@@ -1,33 +1,33 @@
 "use client";
 
-import { ArrowLeft, ArrowRight, ClipboardCheck } from "lucide-react";
-import { useEffect, useRef } from "react";
-import type { StudentAnalysis } from "@/lib/studentAnalysis";
+import { ArrowDown, ArrowLeft, ArrowRight } from "lucide-react";
+import type { CSSProperties } from "react";
+import { snakePosition } from "@/lib/snakePosition";
 
-export default function StudentFlow({ steps, selected, onSelect }: {
-  steps: StudentAnalysis["steps"];
+
+export default function StudentFlow({ steps, selected, onSelect, submissionCheck = true, detailId = "student-step-detail" }: {
+  steps: readonly { action: string; environment?: string }[];
+  submissionCheck?: boolean;
+  detailId?: string;
   selected: number;
   onSelect: (index: number) => void;
 }) {
-  const scroll = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const container = scroll.current;
-    const node = container?.querySelector<HTMLElement>(`[data-flow-step="${selected}"]`);
-    if (container && node) container.scrollTo({ left: node.offsetLeft - container.offsetLeft - (container.clientWidth - node.clientWidth) / 2 });
-  }, [selected]);
-  const labels = [...steps.map(step => step.action), "제출 전 점검"];
-  return <section className="journey-explorer student-flow" aria-label="과제 수행 순서도">
-    <div className="journey-toolbar"><div><p className="eyebrow">전체 수행 순서</p><h2>이 순서대로 진행하세요</h2><p>단계를 선택하면 아래에서 준비물과 주의사항을 확인할 수 있습니다.</p></div>
-      <div className="journey-controls"><span>{selected + 1} / {labels.length}</span><button type="button" aria-label="이전 단계" disabled={selected === 0} onClick={() => onSelect(selected - 1)}><ArrowLeft size={17} aria-hidden="true" /></button><button type="button" aria-label="다음 단계" disabled={selected === steps.length} onClick={() => onSelect(selected + 1)}><ArrowRight size={17} aria-hidden="true" /></button></div>
-    </div>
-    <div className="journey-scroll student-flow-scroll" ref={scroll}>
-      <ol className="student-flow-track">{labels.map((label, index) => <li key={index}>
-        <button type="button" data-flow-step={index} className={`journey-card student-flow-node${selected === index ? " is-selected" : ""}`} aria-current={selected === index ? "step" : undefined} aria-controls="student-step-detail" aria-label={`${index === steps.length ? "마지막" : `${index + 1}단계`}: ${label}`} onClick={() => onSelect(index)}>
-          <span className="journey-card-topline"><span className="node-number">{index === steps.length ? <ClipboardCheck size={22} aria-hidden="true" /> : String(index + 1).padStart(2, "0")}</span><span className="student-flow-node-type">{index === steps.length ? "제출" : "수행"}</span></span>
-          <strong className="node-label" title={label}>{label}</strong><span className="student-flow-node-hint">{selected === index ? "아래에서 확인 중" : "상세 안내 보기"}</span>
-        </button>
-        {index < steps.length && <ArrowRight className="student-flow-arrow" size={28} aria-hidden="true" />}
-      </li>)}</ol>
-    </div>
-  </section>;
+  const labels = [...steps.map(step => step.action), ...(submissionCheck ? ["제출 전 점검"] : [])];
+  return <nav className="student-flow" aria-label="과제 수행 순서">
+    <p className="flow-instruction">단계를 누르면 아래에서 자세한 활동을 확인합니다.</p>
+    <ol className="student-flow-track">{labels.map((label, index) => <li key={index} style={{ "--flow-col": snakePosition(index, 3).column + 1, "--flow-row": snakePosition(index, 3).row + 1, "--flow-col-tablet": snakePosition(index, 2).column + 1, "--flow-row-tablet": snakePosition(index, 2).row + 1 } as CSSProperties}>
+      <button type="button" className={`journey-card flow-node${selected === index ? " is-selected" : ""}`}
+        aria-current={selected === index ? "step" : undefined} aria-controls={detailId}
+        onClick={() => onSelect(index)}>
+        <span className="flow-node-heading"><span className="student-flow-number" aria-hidden="true">{index + 1}</span><span className="flow-node-action">{selected === index ? "선택한 단계" : "상세 보기"}</span></span>
+        <strong>{label}</strong>
+        {steps[index]?.environment && <span className="flow-environment">{steps[index].environment}</span>}
+      </button>
+      {index < labels.length - 1 && [3, 2, 1].map(columns => {
+        const direction = snakePosition(index, columns).direction;
+        const Arrow = direction === "down" ? ArrowDown : direction === "left" ? ArrowLeft : ArrowRight;
+        return <Arrow key={columns} className={`flow-arrow flow-arrow--${columns} flow-arrow--${direction}`} aria-hidden="true" size={32} />;
+      })}
+    </li>)}</ol>
+  </nav>;
 }

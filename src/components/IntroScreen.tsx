@@ -20,16 +20,14 @@ export default function IntroScreen({ onEnter }: { onEnter: () => void }) {
   }
 
   return (
-    <main className={`intro-screen${leaving ? " is-leaving" : ""}`}>
+    <main id="main-content" className={`intro-screen${leaving ? " is-leaving" : ""}`}>
       <div className="intro-copy">
-        <p className="intro-kicker">Homework evaluator</p>
+
         <h1 data-screen-heading tabIndex={-1}>
-          장벽은 없애고,
-          <em>난이도는 지킨다.</em>
+          학생에게 줄 과제를 점검하세요
         </h1>
         <p className="intro-description">
-          Homework evaluator는 디지털 과제 안에 숨어 있는 인지적·기능적 부담을 드러내어, 교사가 학업 난이도를
-          낮추지 않고도 불필요한 장벽을 제거할 수 있도록 돕습니다.
+          학습 목표는 유지하고, 지시문에서 학생이 어려워할 부분을 찾아 수정합니다.
         </p>
         <button
           type="button"

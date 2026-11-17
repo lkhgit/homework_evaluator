@@ -7,13 +7,11 @@ import {
   BookOpen,
   Check,
   CheckCircle2,
-  ChevronRight,
   CircleGauge,
   Clock3,
-  FileText,
   Keyboard,
   Link2,
-  LockKeyhole,
+  LoaderCircle,
   Mic,
   MousePointer2,
   Pencil,
@@ -23,9 +21,12 @@ import {
   Volume2,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 
+import ErrorBanner from "@/components/ErrorBanner";
 import DemandChips, { chipsForDemands } from "@/components/DemandChips";
 import JourneyDiagram from "@/components/JourneyDiagram";
+import StudentFlow from "@/components/StudentFlow";
 import { useWorkflow, type ConditionId } from "@/components/WorkflowContext";
 import { generatePreview } from "@/lib/analysisSource";
 import type { EngineReport } from "@/lib/engine";
@@ -34,19 +35,17 @@ import { timeConstraintChangesOf } from "@/lib/schema";
 import type { Analysis, FrictionMoment, GoalRelevance, RepairEffects, RevisedAssignment, Step } from "@/lib/schema";
 import { diffWords, type DiffSegment } from "@/lib/textDiff";
 import { readStored, writeStored } from "@/lib/browserStore";
+import { BIOLOGY_TEXT } from "@/samples/biology";
 
 function ScreenHeading({
-  eyebrow,
   title,
   subtitle,
 }: {
-  eyebrow?: string;
   title: string;
   subtitle: string;
 }) {
   return (
     <div className="screen-heading">
-      {eyebrow && <p className="eyebrow">{eyebrow}</p>}
       <h1 data-screen-heading tabIndex={-1}>{title}</h1>
       <p>{subtitle}</p>
     </div>
@@ -90,16 +89,13 @@ export function AnalyzeScreen({ text, onChange, onSubmit, hasAnalysis = false, p
     setReading(true);
     setFileNote(null);
     try {
-      const form = new FormData();
-      files.forEach(file => form.append("files", file));
-      const response = await fetch("/api/extract", { method: "POST", body: form });
-      const extracted = await response.json();
-      if (!response.ok) throw new Error(extracted.error || "자료를 읽을 수 없습니다.");
+      const all = [...originals, ...files];
+      if (all.length > 8 || new Set(all.map(file => file.name)).size !== all.length || all.some(file => file.size > 8000000) || all.reduce((sum, file) => sum + file.size, 0) > 11500000) throw new Error("파일은 이름이 서로 다른 최대 8개, 파일당 8MB, 전체 약 11MB까지 추가할 수 있습니다.");
       const next = [...originals, ...files];
       await writeStored(`teacher-files:${projectId}`, next);
       setOriginals(next);
-      onChange([text, extracted.text].filter(Boolean).join("\n\n"));
-      setFileNote({ tone: "ok", text: `${files.length}개 자료를 읽었습니다. AI가 읽은 내용과 수치는 원본과 비교해 주세요.` });
+
+      setFileNote({ tone: "ok", text: `${files.length}개 파일을 추가했습니다. 분석할 때 그림과 도식을 함께 확인합니다.` });
     } catch (error) {
       setFileNote({
         tone: "error",
@@ -111,54 +107,53 @@ export function AnalyzeScreen({ text, onChange, onSubmit, hasAnalysis = false, p
   }
 
   return (
-    <main className="workflow-main">
+    <main id="main-content" className="workflow-main">
       <ScreenHeading
-        eyebrow={hasAnalysis ? "과제" : "새 분석"}
-        title={hasAnalysis ? "내 과제" : "학습 과제 분석하기"}
+        title={hasAnalysis ? "과제 내용 수정" : "과제 점검하기"}
         subtitle={
           hasAnalysis
-            ? "내용을 수정하고 다시 분석하거나, 위 단계를 이용해 결과 화면으로 돌아가세요."
-            : "과제 내용을 붙여넣거나 PDF 파일을 업로드하세요."
+            ? "내용을 고친 뒤 다시 분석하세요. 기존 결과는 상단 단계에서 확인할 수 있습니다."
+            : "학생에게 줄 지침을 넣어 주세요. 학습 목표와 학생이 어려워할 부분을 확인합니다."
         }
       />
 
       <div className="analysis-grid">
         <section className="document-panel" aria-labelledby="assignment-input-heading">
-          <div className="input-tabs" role="tablist" aria-label="과제 입력 방식">
-            <button type="button" role="tab" aria-selected="true" id="assignment-input-heading">
-              <FileText size={16} aria-hidden="true" /> 텍스트 붙여넣기
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected="false"
-              onClick={() => fileInput.current?.click()}
-              disabled={reading}
-            >
-              <Upload size={15} aria-hidden="true" /> {reading ? "자료 읽는 중…" : "PDF·이미지 업로드"}
-            </button>
-            <button type="button" role="tab" aria-selected="false" disabled>
-              <Link2 size={15} aria-hidden="true" /> URL 입력 <span>준비 중</span>
-            </button>
+          <div className="input-toolbar">
+            <h2 id="assignment-input-heading">과제 지침</h2>
+            <div>
+              <button type="button" className="text-button" disabled={reading} onClick={async () => {
+                if ((text.trim() || originals.length) && !window.confirm("현재 입력과 첨부 파일을 확산 실험 예시로 바꿀까요?")) return;
+                try { await writeStored(`teacher-files:${projectId}`, []); setOriginals([]); onChange(BIOLOGY_TEXT); setFileNote(null); }
+                catch { setFileNote({ tone: "error", text: "예시를 적용하지 못했습니다. 다시 시도해 주세요." }); }
+              }}>예시 적용</button>
+              <button type="button" className="button button--secondary" aria-busy={reading} onClick={() => fileInput.current?.click()} disabled={reading}>
+                {reading ? <LoaderCircle className="loading-spinner" size={16} aria-hidden="true" /> : <Upload size={16} aria-hidden="true" />} {reading ? "파일 읽는 중…" : "파일 추가"}
+              </button>
+            </div>
           </div>
           <input
             ref={fileInput}
             type="file"
             accept="application/pdf,.pdf,image/png,image/jpeg"
             multiple
-            className="sr-only"
+            hidden
             aria-label="PDF 또는 이미지 업로드"
             onChange={handleFile}
           />
-          {fileNote && (
+          {fileNote?.tone === "error" ? <ErrorBanner message={fileNote.text} /> : fileNote && (
             <p
-              className={`file-note ${fileNote.tone === "error" ? "file-note--error" : ""}`}
-              role={fileNote.tone === "error" ? "alert" : "status"}
+              className="file-note"
+              role="status"
             >
               {fileNote.text}
             </p>
           )}
-          {originals.length > 0 && <details><summary>원본 자료 ({originals.length})</summary><ul>{originals.map((file, index) => <li key={index}>{file.name} <button type="button" onClick={() => { const url = URL.createObjectURL(file); const link = document.createElement("a"); link.href = url; link.download = file.name; link.click(); window.setTimeout(() => URL.revokeObjectURL(url), 1000); }}>원본 내려받기</button></li>)}</ul><button type="button" onClick={() => { writeStored(`teacher-files:${projectId}`, []).then(() => setOriginals([])).catch(() => setFileNote({ tone: "error", text: "원본 자료를 삭제하지 못했습니다." })); }}>저장된 원본 삭제</button></details>}
+          <ul className="uploaded-files">{originals.map((file, index) => <li key={file.name}><span>{file.name}<small>{(file.size / 1024 / 1024).toFixed(1)} MB</small></span><button type="button" className="text-button" aria-label={`${file.name} 삭제`} onClick={async () => {
+            try { const next = originals.filter((_, at) => at !== index); await writeStored(`teacher-files:${projectId}`, next); setOriginals(next); setFileNote(null); }
+            catch { setFileNote({ tone: "error", text: "파일을 삭제하지 못했습니다. 다시 시도해 주세요." }); }
+          }}>삭제</button></li>)}</ul>
+          <p className="field-help teacher-file-help">PDF, PNG, JPG 파일을 추가하고 필요한 설명을 아래에 적어 주세요. 파일만으로도 분석할 수 있습니다.</p>
           <label htmlFor="assignment-text" className="sr-only">과제 내용</label>
           <textarea
             id="assignment-text"
@@ -166,31 +161,32 @@ export function AnalyzeScreen({ text, onChange, onSubmit, hasAnalysis = false, p
             disabled={reading}
             onChange={(event) => onChange(event.target.value)}
             spellCheck={false}
+            placeholder="추가 설명이나 과제 지시문을 입력하세요. 첨부 파일의 내용은 여기에 옮기지 않아도 됩니다."
             aria-describedby="prototype-note"
           />
+          <p className="data-notice">분석할 때 첨부 파일과 입력한 글이 외부 AI로 전송됩니다. 이름과 학번 등 불필요한 개인정보는 지워 주세요. <Link href="/guide">자료 처리 안내</Link></p>
           <div className="document-footer">
             <p id="prototype-note">
               {hasAnalysis
                 ? "다시 분석하면 현재 결과와 개선안이 대체됩니다."
-                : "실시간으로 분석됩니다 · 샘플 과제는 즉시 결과가 나옵니다"}
+                : "PDF, PNG, JPG 파일을 추가하거나 직접 입력하세요."}
             </p>
-            <ArrowButton onClick={onSubmit} disabled={text.trim().length === 0 || reading}>
+            <ArrowButton onClick={onSubmit} disabled={(!text.trim() && !originals.length) || reading}>
               {hasAnalysis ? "과제 다시 분석하기" : "과제 분석하기"}
             </ArrowButton>
           </div>
         </section>
 
         <aside className="tips-panel" aria-labelledby="tips-title">
-          <div className="tips-icon" aria-hidden="true"><Sparkles size={18} /></div>
-          <h2 id="tips-title">더 나은 분석을 위해</h2>
+          <h2 id="tips-title">입력할 내용</h2>
           <ul>
-            <li><Check size={15} aria-hidden="true" /> 학생용 지시문 전체를 포함하세요</li>
-            <li><Check size={15} aria-hidden="true" /> 학습 목표를 포함하세요</li>
-            <li><Check size={15} aria-hidden="true" /> 관련 있는 링크를 포함하세요</li>
+            <li><Check size={15} aria-hidden="true" /> 학생에게 줄 지시문 전체</li>
+            <li><Check size={15} aria-hidden="true" /> 학습 목표와 평가 기준</li>
+            <li><Check size={15} aria-hidden="true" /> 준비물과 제출 방법</li>
           </ul>
           <div className="tip-note">
-            <p>Homework evaluator가 살펴보는 것</p>
-            <span>행동, 전환, 기억 부담, 상호작용 정밀도, 시간, 응답 방식.</span>
+            <p>어떤 부분을 확인하나요?</p>
+            <span>지시 순서, 외워야 할 정보, 시간 제한, 도구 사용과 답변 방식을 살펴봅니다.</span>
           </div>
         </aside>
       </div>
@@ -198,65 +194,21 @@ export function AnalyzeScreen({ text, onChange, onSubmit, hasAnalysis = false, p
   );
 }
 
-/**
- * Two passes run against the model, and they do different work. Showing the
- * same six messages for both made the first pass claim it had traced friction
- * and prepared recommendations when it had only read the assignment — and then
- * Goal Lock asked the educator to confirm a goal the app implied it had already
- * finished working from.
- */
 const PHASE_COPY = {
-  objective: {
-    eyebrow: "1/2단계 · 과제 읽는 중",
-    messages: [
-      "과제를 읽는 중…",
-      "무엇을 가르치려는 과제인지 파악하는 중…",
-    ],
-    /** Objective extraction usually returns in a few seconds. */
-    cadenceMs: 1800,
-  },
-  analysis: {
-    eyebrow: "2/2단계 · 과제를 행동 단위로 분석하는 중",
-    messages: [
-      "과제를 학생의 행동 단위로 나누는 중…",
-      "기능적 부담을 정리하는 중…",
-      "접근성 어려움을 찾는 중…",
-      "부담을 학습 목표와 비교하는 중…",
-      "개선안을 준비하는 중…",
-    ],
-    /** The full analysis runs far longer, so the messages are paced to match. */
-    cadenceMs: 7000,
-  },
+  objective: { title: "학습 목표를 확인하고 있습니다", description: "과제 지침에서 학생이 배워야 할 내용을 찾고 있습니다." },
+  analysis: { title: "과제를 분석하고 있습니다", description: "수행 순서와 예상되는 어려움을 확인하고 있습니다. 과제가 길면 시간이 더 걸립니다." },
 } as const;
 
 export type LoadingPhase = keyof typeof PHASE_COPY;
 
-export function AnalysisLoadingScreen({ phase = "analysis" }: { phase?: LoadingPhase }) {
-  const { eyebrow, messages, cadenceMs } = PHASE_COPY[phase];
-  const [messageIndex, setMessageIndex] = useState(0);
-
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      setMessageIndex((current) => Math.min(current + 1, messages.length - 1));
-    }, cadenceMs);
-    return () => window.clearInterval(timer);
-  }, [messages.length, cadenceMs]);
-
-  const onLastMessage = messageIndex === messages.length - 1;
-
+export function AnalysisLoadingScreen({ phase = "analysis", onCancel }: { phase?: LoadingPhase; onCancel: () => void }) {
+  const { title, description } = PHASE_COPY[phase];
   return (
-    <main className="loading-screen" aria-live="polite" aria-busy="true">
-      <div className="neural-loader" aria-hidden="true">
-        <span />
-        <i /><i /><i /><i />
-      </div>
-      <p className="eyebrow">{eyebrow}</p>
-      <h1 data-screen-heading tabIndex={-1}>{messages[messageIndex]}</h1>
-      <p>
-        {onLastMessage
-          ? "아직 진행 중입니다 — 과제가 길수록 시간이 더 걸립니다."
-          : `${messages.length}단계 중 ${messageIndex + 1}단계`}
-      </p>
+    <main id="main-content" className="loading-screen" aria-busy="true">
+      <LoaderCircle className="loading-spinner" size={44} aria-hidden="true" />
+      <h1 data-screen-heading tabIndex={-1}>{title}</h1>
+      <p role="status">{description}</p>
+      <button type="button" className="button button--secondary" onClick={onCancel}>취소하고 돌아가기</button>
     </main>
   );
 }
@@ -268,47 +220,22 @@ export interface GoalLockScreenProps {
 }
 
 export function GoalLockScreen({ objective, onEdit, onLock }: GoalLockScreenProps) {
-  const [editing, setEditing] = useState(false);
-  const [locked, setLocked] = useState(false);
-
+  const { goTo } = useWorkflow();
   return (
-    <main className="workflow-main goal-screen">
-      <ScreenHeading
-        eyebrow="목표 확정"
-        title="학습 목표 확정하기"
-        subtitle="학생들이 실제로 배워야 할 것이 무엇인지 확인하세요. Homework evaluator는 접근성 개선을 제안하는 동안 이 목표를 그대로 지킵니다."
-      />
-      <section className={`goal-panel ${locked ? "is-locked" : ""}`} aria-labelledby="goal-label">
-        <div className="goal-panel-head">
-          <span className="goal-lock-icon" aria-hidden="true"><LockKeyhole size={19} /></span>
-          <p className="eyebrow" id="goal-label">학습 목표</p>
-          {locked && <span className="goal-locked-badge">확정됨</span>}
-        </div>
+    <main id="main-content" className="workflow-main goal-screen">
+      <ScreenHeading title="학습 목표 확인" subtitle="과제에서 찾은 목표입니다. 학생이 배워야 할 내용과 다르면 직접 고쳐 주세요." />
+      <section className="goal-panel" aria-labelledby="goal-label">
+        <h2 id="goal-label">학습 목표</h2>
         <div className="goal-content">
-          {editing ? (
-            <textarea value={objective} onChange={(event) => onEdit(event.target.value)} aria-label="학습 목표" autoFocus />
-          ) : (
-            <blockquote>“{objective}”</blockquote>
-          )}
+          <label className="sr-only" htmlFor="learning-objective">학습 목표 수정</label>
+          <textarea id="learning-objective" value={objective} onChange={(event) => onEdit(event.target.value)} />
         </div>
+        <p className="field-help">이 목표를 기준으로 과제의 어려움과 개선안을 검토합니다.</p>
       </section>
-
-      {!locked ? (
-        <div className="goal-actions">
-          <button type="button" className="button button--secondary" onClick={() => setEditing((value) => !value)}>
-            <Pencil size={16} aria-hidden="true" /> {editing ? "수정 완료" : "목표 수정"}
-          </button>
-          <button type="button" className="button button--primary" onClick={() => { setEditing(false); setLocked(true); }} disabled={!objective.trim()}>
-            <LockKeyhole size={16} aria-hidden="true" /> 목표 확인 및 확정
-          </button>
-        </div>
-      ) : (
-        <div className="goal-confirmation" aria-live="polite">
-          <p><CheckCircle2 size={18} aria-hidden="true" /> 목표가 확정되었습니다</p>
-          <span>개선안은 학생이 학습에 접근하거나 학습을 증명하는 방식을 바꿀 수는 있지만, 학생이 배워야 할 내용 자체는 바꾸지 않습니다.</span>
-          <ArrowButton onClick={onLock}>계속하기</ArrowButton>
-        </div>
-      )}
+      <div className="screen-footer-actions">
+        <button type="button" className="button button--secondary" onClick={() => goTo("analyze")}><ArrowLeft size={16} aria-hidden="true" /> 과제 수정</button>
+        <ArrowButton onClick={onLock} disabled={!objective.trim()}>이 목표로 분석하기</ArrowButton>
+      </div>
     </main>
   );
 }
@@ -369,7 +296,6 @@ function nodeLabel(action: string): string {
 
 export function JourneyScan({ analysis, report }: JourneyScanProps) {
   const { goTo, selectFriction } = useWorkflow();
-  const journeyDiagramRef = useRef<HTMLDivElement>(null);
   const [selectedStepId, setSelectedStepId] = useState(() => (
     analysis.steps.find((step) => analysis.frictionMoments.some((friction) => friction.stepIds.includes(step.id)))?.id
     ?? analysis.steps[0]?.id
@@ -393,17 +319,12 @@ export function JourneyScan({ analysis, report }: JourneyScanProps) {
     if (!nextStep) return;
 
     setSelectedStepId(nextStep.id);
-    const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const usesVerticalTimeline = window.matchMedia("(max-width: 580px)").matches;
     window.requestAnimationFrame(() => {
-      const scrollTarget = usesVerticalTimeline
-        ? document.getElementById("journey-step-detail")
-        : journeyDiagramRef.current?.querySelector(`[data-step-id="${CSS.escape(nextStep.id)}"]`);
-      scrollTarget?.scrollIntoView({
-        behavior: prefersReducedMotion ? "auto" : "smooth",
-        block: usesVerticalTimeline ? "start" : "nearest",
-        inline: "center",
-      });
+      const heading = document.getElementById("selected-step-title");
+      heading?.focus({ preventScroll: true });
+      if (window.matchMedia("(max-width: 580px)").matches) {
+        heading?.scrollIntoView({ block: "start", behavior: "auto" });
+      }
     });
   }
 
@@ -415,18 +336,16 @@ export function JourneyScan({ analysis, report }: JourneyScanProps) {
   }
 
   return (
-    <main className="workflow-main journey-screen">
+    <main id="main-content" className="workflow-main journey-screen">
       <ScreenHeading
-        eyebrow="과제 분석"
-        title="학생의 관점에서 분석"
-        subtitle="과제를 학생의 실제 행동 단위로 나누어 접근성 어려움이 어디서 생기는지 보여드립니다."
+        title="과제 분석 결과"
+        subtitle="학생이 해야 할 일을 순서대로 나눴습니다. 각 단계에서 예상되는 어려움을 확인하세요."
       />
       <section className="journey-explorer" aria-labelledby="journey-overview-title">
         <header className="journey-toolbar">
           <div>
-            <p className="eyebrow">과제 개요</p>
-            <h2 id="journey-overview-title">단계별로 과제를 따라가보세요</h2>
-            <p>단계를 선택하면 해당 환경, 부담, 접근성 어려움을 자세히 볼 수 있습니다.</p>
+            <h2 id="journey-overview-title">과제 수행 순서</h2>
+            <p>단계를 선택하면 필요한 도구와 예상되는 어려움을 확인할 수 있습니다.</p>
           </div>
           <nav className="journey-controls" aria-label="과제 단계 이동">
             <span aria-live="polite">{analysis.steps.length}단계 중 {selectedStepIndex + 1}단계</span>
@@ -456,29 +375,16 @@ export function JourneyScan({ analysis, report }: JourneyScanProps) {
           <div><dt>학습 환경 수</dt><dd>{report.switching.uniqueEnvironments.length}</dd></div>
         </dl>
 
-        <div className="journey-scroll" aria-label={`전체 ${analysis.steps.length}개 과제 단계`}>
-          <JourneyDiagram
-            ref={journeyDiagramRef}
-            analysis={analysis}
-            report={report}
-            selectedStepId={selectedStep?.id}
-            frictionByStep={frictionByStep}
-            onSelect={selectStep}
-            nodeLabel={(step) => nodeLabel(step.action)}
-            relevanceLabel={RELEVANCE_LABEL}
-            severityLabel={SEVERITY_LABEL}
-          />
-        </div>
+        <StudentFlow steps={analysis.steps} selected={selectedStepIndex} onSelect={selectStep} submissionCheck={false} detailId="journey-step-detail" />
 
         {selectedStep && (
           <article className="journey-step-detail" id="journey-step-detail" aria-labelledby="selected-step-title">
             <div className="journey-step-context">
-              <p className="eyebrow">선택한 단계 · {String(selectedStepIndex + 1).padStart(2, "0")}</p>
-              <h2 id="selected-step-title">{imperativeAction(selectedStep.action)}</h2>
-              <div className="journey-step-meta">
-                <span><Link2 size={14} aria-hidden="true" /> {selectedStep.environment}</span>
-                <span>목표와의 관련성: {RELEVANCE_LABEL[selectedStep.goalRelevance]}</span>
-              </div>
+              <h2 id="selected-step-title" tabIndex={-1}>{selectedStepIndex + 1}. {imperativeAction(selectedStep.action)}</h2>
+              <dl className="step-facts">
+                <div><dt>사용 도구</dt><dd><Link2 size={14} aria-hidden="true" /> {selectedStep.environment}</dd></div>
+                <div><dt>학습 목표와의 관계</dt><dd>{RELEVANCE_LABEL[selectedStep.goalRelevance]}</dd></div>
+              </dl>
               <div className="journey-demand-block">
                 <h3>기능적 부담</h3>
                 <DemandChips demands={selectedStep.demands} />
@@ -488,7 +394,6 @@ export function JourneyScan({ analysis, report }: JourneyScanProps) {
             <div className="journey-friction-detail">
               {selectedFrictions.length > 0 ? (
                 <>
-                  <p className="eyebrow">이 단계의 어려움</p>
                   <div className="journey-friction-list">
                     {selectedFrictions.map((friction) => (
                       <section key={friction.id} className="journey-friction-card" aria-labelledby={`friction-title-${friction.id}`}>
@@ -521,6 +426,21 @@ export function JourneyScan({ analysis, report }: JourneyScanProps) {
             </div>
           </article>
         )}
+        <details className="journey-map">
+          <summary>도구 이동과 기억 부담 자세히 보기</summary>
+        <div className="journey-scroll" tabIndex={0} role="region" aria-label={`전체 ${analysis.steps.length}개 과제 단계`}>
+          <JourneyDiagram
+            analysis={analysis}
+            report={report}
+            selectedStepId={selectedStep?.id}
+            frictionByStep={frictionByStep}
+            onSelect={selectStep}
+            nodeLabel={(step) => nodeLabel(step.action)}
+            relevanceLabel={RELEVANCE_LABEL}
+            severityLabel={SEVERITY_LABEL}
+          />
+        </div>
+        </details>
       </section>
     </main>
   );
@@ -561,25 +481,24 @@ const BARRIER_CATEGORY_LABEL: Record<string, string> = {
 };
 
 export function BarrierTrace({ assignmentText, step, friction, citation }: BarrierTraceProps) {
-  const { goTo, applyRepair } = useWorkflow();
+  const { goTo } = useWorkflow();
   const category = BARRIER_CATEGORY_LABEL[friction.barrierType] ?? friction.barrierType.replaceAll("_", " ");
   return (
-    <main className="workflow-main">
-      <ScreenHeading eyebrow="어려움" title="어려움 살펴보기" subtitle="학생이 어디에서 막히는지, 그리고 왜 막히는지 확인하세요." />
+    <main id="main-content" className="workflow-main">
+      <ScreenHeading title="어려움 살펴보기" subtitle="학생이 어디에서 막히는지, 그리고 왜 막히는지 확인하세요." />
       <div className="barrier-grid">
         <section className="excerpt-panel" aria-labelledby="excerpt-title">
           <div className="document-masthead">
-            <div><span className="paper-dot" aria-hidden="true" /><span className="paper-dot" aria-hidden="true" /><span className="paper-dot" aria-hidden="true" /></div>
-            <p id="excerpt-title">과제 원문</p>
+            <h2 id="excerpt-title">과제 원문</h2>
           </div>
           <HighlightedEvidence assignmentText={assignmentText} evidence={step.evidence} />
         </section>
         <article className="barrier-detail">
+          <h2>{friction.title}</h2>
           <div className="barrier-meta">
             <span>{category}</span>
             <strong className={`severity-text severity-${friction.severity}`}>심각도 {SEVERITY_LABEL[friction.severity]}</strong>
           </div>
-          <h2>{friction.title}</h2>
           <dl>
             <div><dt>발견된 이유</dt><dd>{friction.explanation}</dd></div>
             <div><dt>중요한 이유</dt><dd>{step.relevanceReason}</dd></div>
@@ -589,8 +508,7 @@ export function BarrierTrace({ assignmentText, step, friction, citation }: Barri
           <p className="citation"><BookOpen size={15} aria-hidden="true" /> {citation}</p>
           <div className="barrier-actions">
             <button type="button" className="button button--secondary" onClick={() => goTo("journey")}><ArrowLeft size={16} aria-hidden="true" /> 과제 분석으로 돌아가기</button>
-            <button type="button" className="button button--primary" onClick={() => { applyRepair(step.id); goTo("repair"); }}><Check size={16} aria-hidden="true" /> 개선안 적용</button>
-            <button type="button" className="button button--secondary" onClick={() => goTo("preview")}>과제 개선안 미리보기 <ChevronRight size={16} aria-hidden="true" /></button>
+            <ArrowButton onClick={() => goTo("repair")}>개선안 검토하기</ArrowButton>
           </div>
         </article>
       </div>
@@ -600,8 +518,7 @@ export function BarrierTrace({ assignmentText, step, friction, citation }: Barri
 
 export interface RepairScreenProps {
   steps: Step[];
-  /** Repairs already accepted elsewhere — the Barrier Trace has its own Apply
-   *  button, and arriving here to be told nothing was applied would be wrong. */
+  /** Previously accepted decisions remain selected when returning to review. */
   appliedRepairIds: string[];
   onApply: (stepId: string) => void;
   onKeep: (stepId: string) => void;
@@ -678,9 +595,10 @@ export function RepairScreen({ steps, appliedRepairIds, onApply, onKeep, onCusto
   const ready = Object.values(decisions).filter((decision) => decision !== "keep").length;
 
   return (
-    <main className="workflow-main repair-screen">
-      <ScreenHeading eyebrow="개선" title="개선 계획" subtitle="학습 목표를 지키면서 제안된 접근성 개선안을 검토하세요." />
+    <main id="main-content" className="workflow-main repair-screen">
+      <ScreenHeading title="개선안 검토" subtitle="제안을 읽고 적용 여부를 선택하세요. 필요한 부분은 직접 수정할 수 있습니다." />
       <div className="repair-list">
+        {repairSteps.length === 0 && <p className="empty-state">검토할 개선안이 없습니다. 다음 단계에서 접근 조건을 확인하세요.</p>}
         {repairSteps.map((step, index) => {
           const decision = decisions[step.id];
           const demands = chipsForDemands(step.demands);
@@ -706,7 +624,7 @@ export function RepairScreen({ steps, appliedRepairIds, onApply, onKeep, onCusto
                     <label htmlFor={`custom-${step.id}`}>제안 직접 수정하기</label>
                     <textarea id={`custom-${step.id}`} value={draft} onChange={(event) => setDraft(event.target.value)} autoFocus />
                     <p>새로 작성한 내용은 측정치에 반영되기 전에 다시 분류됩니다.</p>
-                    {customError && <p role="alert" className="customize-error">{customError}</p>}
+                    {customError && <ErrorBanner message={customError} />}
                     <button type="button" className="button button--small button--primary" onClick={() => saveCustomize(step.id)} disabled={savingId === step.id || draft.trim().length === 0}>
                       {savingId === step.id ? "검증 중…" : "저장 및 적용"}
                     </button>
@@ -717,9 +635,9 @@ export function RepairScreen({ steps, appliedRepairIds, onApply, onKeep, onCusto
                   <p><strong>난이도 {step.repair!.rigorPreserved ? "유지됨" : "검토 필요"}</strong><span>{step.repair!.rigorNote}</span></p>
                 </div>
                 <div className="repair-row-actions" aria-label={`${step.repair!.barrierReduced}에 대한 결정`}>
-                  <button type="button" className={decision === "apply" ? "is-selected" : ""} onClick={() => choose(step.id, "apply")}><Check size={14} aria-hidden="true" /> 적용</button>
+                  <button type="button" className={decision === "apply" ? "is-selected" : ""} aria-pressed={decision === "apply"} onClick={() => choose(step.id, "apply")}><Check size={14} aria-hidden="true" /> 적용</button>
                   <button type="button" onClick={() => beginCustomize(step)}><Pencil size={14} aria-hidden="true" /> 직접 수정</button>
-                  <button type="button" className={decision === "keep" ? "is-selected" : ""} onClick={() => choose(step.id, "keep")}>현재 상태 유지</button>
+                  <button type="button" className={decision === "keep" ? "is-selected" : ""} aria-pressed={decision === "keep"} onClick={() => choose(step.id, "keep")}>현재 상태 유지</button>
                 </div>
                 {demands.length > 0 && <p className="repair-demand-note">{demands.map((demand) => demand.label).join(", ")}에서 감지됨.</p>}
               </div>
@@ -728,9 +646,9 @@ export function RepairScreen({ steps, appliedRepairIds, onApply, onKeep, onCusto
         })}
       </div>
       <div className="sticky-action-bar">
-        <p>어려움 {repairSteps.length}개 중 <strong>{reviewed}</strong>개 검토함 <span aria-hidden="true">·</span> 개선안 <strong>{ready}</strong>개 준비됨</p>
-        <button type="button" className="button button--secondary" onClick={() => goTo("barrier")}><ArrowLeft size={16} aria-hidden="true" /> 어려움으로 돌아가기</button>
-        <ArrowButton onClick={() => goTo("constraint")} disabled={reviewed === 0}>테스트로 계속하기</ArrowButton>
+        <p>어려움 {repairSteps.length}개 중 <strong>{reviewed}</strong>개 검토함 <span aria-hidden="true"> / </span> 개선안 <strong>{ready}</strong>개 준비됨</p>
+        <button type="button" className="button button--secondary" onClick={() => goTo("journey")}><ArrowLeft size={16} aria-hidden="true" /> 분석 결과</button>
+        <ArrowButton onClick={() => goTo("constraint")} disabled={repairSteps.length > 0 && reviewed === 0}>접근 조건 확인하기</ArrowButton>
       </div>
     </main>
   );
@@ -827,7 +745,6 @@ export function ConstraintTest({ analysis, repairedAnalysis, report, repairedRep
   const { goTo, selectCondition } = useWorkflow();
   const selected = CONDITIONS.find((item) => item.id === condition) ?? CONDITIONS[0];
   const unavailable = selected.unavailable === true;
-  const [visibleCount, setVisibleCount] = useState(0);
 
   // Each graph is judged against its own measurements, so a repair that changes
   // what the engine measures changes the result rather than only the rating.
@@ -858,22 +775,10 @@ export function ConstraintTest({ analysis, repairedAnalysis, report, repairedRep
       !selected.fails(focusedRepaired, after),
   );
 
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      setVisibleCount((count) => {
-        if (count >= analysis.steps.length) {
-          window.clearInterval(timer);
-          return count;
-        }
-        return count + 1;
-      });
-    }, 90);
-    return () => window.clearInterval(timer);
-  }, [condition, analysis.steps.length]);
 
   return (
-    <main className="workflow-main constraint-screen">
-      <ScreenHeading eyebrow="검증" title="접근성 조건 테스트하기" subtitle="다양한 기능적 접근 조건에서 과제가 어디서 막히는지 확인하세요." />
+    <main id="main-content" className="workflow-main constraint-screen">
+      <ScreenHeading title="접근 조건 확인" subtitle="접근 조건을 선택하고, 개선 전후에 달라진 부분을 확인하세요." />
       <div className="constraint-grid">
         <aside className="condition-list" aria-labelledby="conditions-title">
           <h2 id="conditions-title">기능적 조건</h2>
@@ -889,12 +794,12 @@ export function ConstraintTest({ analysis, repairedAnalysis, report, repairedRep
 
         <section className="journey-results" aria-labelledby="results-title">
           <div className="result-heading">
-            <div><p className="eyebrow">과제 결과</p><h2 id="results-title">{selected.label}</h2></div>
+            <div><h2 id="results-title">{selected.label}</h2></div>
             {!unavailable && (
               <span>
                 {fixedCount > 0
-                  ? `전체 ${analysis.steps.length}단계 중 ${stillFailing.length}단계 실패 — 개선안으로 ${fixedCount}단계 해결됨`
-                  : `전체 ${analysis.steps.length}단계 중 ${failedSteps.length}단계 실패`}
+                  ? `전체 ${analysis.steps.length}단계 중 ${stillFailing.length}단계에 어려움이 남았습니다. 개선 후 ${fixedCount}단계 해결`
+                  : `전체 ${analysis.steps.length}단계 중 ${failedSteps.length}단계에서 어려움이 예상됩니다`}
               </span>
             )}
           </div>
@@ -907,7 +812,7 @@ export function ConstraintTest({ analysis, repairedAnalysis, report, repairedRep
                 const repaired = repairedById.get(step.id);
                 const fixed = fails && repaired !== undefined && !selected.fails(repaired, after);
                 return (
-                  <li key={step.id} className={index < visibleCount ? "is-visible" : ""}>
+                  <li key={step.id}>
                     <span>{index + 1}</span>
                     <p>{step.action}</p>
                     {fixed ? (
@@ -924,8 +829,7 @@ export function ConstraintTest({ analysis, repairedAnalysis, report, repairedRep
           )}
           {!unavailable && stillFailing.length > 0 && (
             <article className="failure-explanation">
-              <p className="eyebrow">실패하는 이유</p>
-              <h3>{focusedStep.action}</h3>
+              <h3>어려움이 남은 단계: {focusedStep.action}</h3>
               <p>{focusedStep.relevanceReason}</p>
               {focusedFixed && focusedStep.repair ? (
                 <span>
@@ -937,8 +841,8 @@ export function ConstraintTest({ analysis, repairedAnalysis, report, repairedRep
         </section>
 
         <aside className="condition-preview" aria-labelledby="preview-title">
-          <p className="eyebrow">과제 개선안 미리보기</p>
-          <h2 id="preview-title">{focusedStep.action}</h2>
+          <h2 id="preview-title">이 단계의 변경 내용</h2>
+          <p>{focusedStep.action}</p>
           {focusedFixed && focusedStep.repair ? (
             <><div className="preview-results"><p>과제 지원 내용</p><strong>{focusedStep.repair.suggestion}</strong></div><p className="preview-assurance"><Check size={14} aria-hidden="true" /> 작업 중에도 참고 자료가 계속 제공됩니다.</p></>
           ) : (
@@ -947,7 +851,7 @@ export function ConstraintTest({ analysis, repairedAnalysis, report, repairedRep
           <dl className="compact-metrics"><div><dt>과제 환경 수</dt><dd>{report.switching.uniqueEnvironments.length}{repairedReport.switching.uniqueEnvironments.length !== report.switching.uniqueEnvironments.length ? ` → ${repairedReport.switching.uniqueEnvironments.length}` : ""}</dd></div><div><dt>활성 타이머</dt><dd>{report.timing.constraints.length || "없음"}{repairedReport.timing.constraints.length !== report.timing.constraints.length ? ` → ${repairedReport.timing.constraints.length || "없음"}` : ""}</dd></div></dl>
         </aside>
       </div>
-      <div className="screen-footer-actions"><button type="button" className="button button--secondary" onClick={() => goTo("repair")}><ArrowLeft size={16} aria-hidden="true" /> 개선안으로 돌아가기</button><button type="button" className="button button--secondary" onClick={() => selectCondition(CONDITIONS[0].id)}>다른 조건 테스트하기</button><ArrowButton onClick={() => goTo("preview")}>계속하기</ArrowButton></div>
+      <div className="screen-footer-actions"><button type="button" className="button button--secondary" onClick={() => goTo("repair")}><ArrowLeft size={16} aria-hidden="true" /> 개선안으로 돌아가기</button><ArrowButton onClick={() => goTo("preview")}>수정본 확인하기</ArrowButton></div>
     </main>
   );
 }
@@ -970,17 +874,12 @@ interface AccessTool {
   id: string;
   label: string;
   hint: string;
-  /** False when the control is not wired to behaviour yet; it is then shown as Roadmap
-   *  rather than as a toggle that quietly does nothing. */
-  live: boolean;
 }
 
 const ACCESS_TOOLS: AccessTool[] = [
-  { id: "spacing", label: "간격 넓히기", hint: "줄 간격과 자간을 넓힙니다", live: true },
-  { id: "declutter", label: "시각적 요소 줄이기", hint: "수정된 과제만 표시합니다", live: true },
-  { id: "readAloud", label: "소리 내어 읽기", hint: "수정된 과제를 음성으로 읽어줍니다", live: true },
-  { id: "chunk", label: "지시문 나누기", hint: "한 번에 한 단계씩", live: false },
-  { id: "highlight", label: "현재 단계 강조", hint: "나머지는 흐리게 표시", live: false },
+  { id: "spacing", label: "간격 넓히기", hint: "줄 간격과 자간을 넓힙니다" },
+  { id: "declutter", label: "시각적 요소 줄이기", hint: "수정된 과제만 표시합니다" },
+  { id: "readAloud", label: "소리 내어 읽기", hint: "수정된 과제를 음성으로 읽어줍니다" },
 ];
 
 /** Wraps the changed words in <mark>; falls back to plain text when no comparison is available. */
@@ -1071,8 +970,32 @@ export function StudentPreview({ objective, steps, appliedRepairIds, assignmentT
   }, [tools.readAloud, revised]);
 
   return (
-    <main className="workflow-main student-preview-screen">
-      <ScreenHeading eyebrow="미리보기" title="과제 개선안 미리보기" subtitle="같은 과제를 더 쉽게" />
+    <main id="main-content" className="workflow-main student-preview-screen">
+      <ScreenHeading title="수정본 확인" subtitle="원본과 비교한 뒤, 학생에게 줄 안내를 확인하세요." />
+
+      <details className="preview-options"><summary>보기 설정</summary>
+        <aside className="access-tools" aria-labelledby="tools-title">
+          <h2 id="tools-title">표시 방식</h2>
+          <p>읽기 편한 방식을 선택하세요.</p>
+          <div>
+            {ACCESS_TOOLS.map((tool) => (
+              <label key={tool.id}>
+                <span>
+                  {tool.label}
+                  <small>{tool.hint}</small>
+                </span>
+                <input
+                  type="checkbox"
+                  checked={Boolean(tools[tool.id])}
+                  onChange={(event) =>
+                    setTools((current) => ({ ...current, [tool.id]: event.target.checked }))
+                  }
+                />
+              </label>
+            ))}
+          </div>
+        </aside>
+      </details>
 
       <section
         className={`revision-compare${tools.spacing ? " is-spaced" : ""}${tools.declutter ? " is-decluttered" : ""}`}
@@ -1080,7 +1003,7 @@ export function StudentPreview({ objective, steps, appliedRepairIds, assignmentT
       >
         <article className="student-assignment">
           <header><p>원본</p><span>현재 학생들이 받는 과제</span></header>
-          <section className="student-goal"><p className="eyebrow">학습 목표</p><h2>{objective}</h2></section>
+          <section className="student-goal"><h2>학습 목표</h2><p>{objective}</p></section>
           <pre className="assignment-body">{renderDiff(diff?.original, assignmentText, "removed")}</pre>
         </article>
 
@@ -1089,7 +1012,7 @@ export function StudentPreview({ objective, steps, appliedRepairIds, assignmentT
             <p>수정본</p>
             <span>{revised ? revised.title : "채택한 개선안이 반영된 버전"}</span>
           </header>
-          <section className="student-goal"><p className="eyebrow">학습 목표</p><h2>{objective}</h2></section>
+          <section className="student-goal"><h2>학습 목표</h2><p>{objective}</p></section>
 
           {accepted.length === 0 && (
             <p className="revision-empty">
@@ -1107,7 +1030,7 @@ export function StudentPreview({ objective, steps, appliedRepairIds, assignmentT
 
           {message !== "" && (
             <div className="revision-empty revision-empty--error" role="alert">
-              <p>{message}</p>
+              <ErrorBanner message={message} />
               <button type="button" className="button button--small button--secondary" onClick={retryRewrite}>다시 시도</button>
             </div>
           )}
@@ -1126,7 +1049,7 @@ export function StudentPreview({ objective, steps, appliedRepairIds, assignmentT
 
       {revised && revised.changes.length > 0 && (
         <section className={`revision-changes${tools.declutter ? " is-hidden" : ""}`} aria-labelledby="changes-title">
-          <h2 id="changes-title">무엇이, 왜 바뀌었는가</h2>
+          <h2 id="changes-title">바뀐 내용과 이유</h2>
           <ol>
             {revised.changes.map((change) => (
               <li key={change.what}>
@@ -1142,42 +1065,12 @@ export function StudentPreview({ objective, steps, appliedRepairIds, assignmentT
         <section className="handout-preview" aria-labelledby="handout-title">
           <header>
             <h2 id="handout-title">학생용 화면 미리보기</h2>
-            <p>학생이 내려받을 HTML 파일과 똑같은 화면입니다. 단계를 눌러 선행·후행 행동이 맞는지 확인해 보세요.</p>
+            <p>학생이 내려받을 HTML 파일과 똑같은 화면입니다. 단계별 안내가 올바른 순서인지 확인하세요.</p>
           </header>
           <iframe title="학생용 HTML 미리보기" srcDoc={handoutHtml} sandbox="allow-scripts" />
         </section>
       )}
 
-      <div className="student-layout">
-        <aside className="access-tools" aria-labelledby="tools-title">
-          <h2 id="tools-title">접근성 도구</h2>
-          <p>과제가 표시되는 방식을 개인화하세요.</p>
-          <div>
-            {ACCESS_TOOLS.map((tool) => (
-              <label key={tool.id} className={tool.live ? "" : "is-roadmap"}>
-                <span>
-                  {tool.label}
-                  <small>{tool.hint}</small>
-                </span>
-                {tool.live ? (
-                  <>
-                    <input
-                      type="checkbox"
-                      checked={Boolean(tools[tool.id])}
-                      onChange={(event) =>
-                        setTools((current) => ({ ...current, [tool.id]: event.target.checked }))
-                      }
-                    />
-                    <i aria-hidden="true" />
-                  </>
-                ) : (
-                  <em>준비 중</em>
-                )}
-              </label>
-            ))}
-          </div>
-        </aside>
-      </div>
       <div className="screen-footer-actions">
         <button type="button" className="button button--secondary" onClick={() => goTo("repair")}><ArrowLeft size={16} aria-hidden="true" /> 개선안으로 돌아가기</button>
         {message !== "" ? (
@@ -1205,17 +1098,16 @@ export interface CompleteScreenProps {
 }
 
 export function CompleteScreen({ frictionCount, frictionResolved, frictionUnverified, repairsApplied, goalPreserved, onExport, canExport }: CompleteScreenProps) {
-  const { startOver } = useWorkflow();
+  const { startOver, goTo } = useWorkflow();
   const unresolved = frictionCount - frictionResolved - frictionUnverified;
   const remainingSummary = `아직 해결되지 않은 어려움이 ${unresolved}개 남아 있습니다${frictionUnverified > 0 ? `. 그리고 과제 데이터로는 결과를 확인할 수 없는 항목이 ${frictionUnverified}개 있습니다` : ""}.`;
   return (
-    <main className="complete-screen">
+    <main id="main-content" className="complete-screen">
       <div className="complete-mark" aria-hidden="true"><span /><span /><span /></div>
-      <p className="eyebrow">분석 완료</p>
       <h1 data-screen-heading tabIndex={-1}>{canExport ? "수정된 과제가 준비되었습니다." : "분석이 완료되었습니다."}</h1>
       <p className="complete-intro">
         {!canExport
-          ? "과제가 측정되었고, 채택한 개선 결정이 기록되었습니다. 수정된 과제가 생성되지 않아 내보내기는 사용할 수 없습니다."
+          ? "분석 결과를 저장했습니다. 수정본이 없어 학생용 안내는 아직 내려받을 수 없습니다."
           : frictionResolved === frictionCount
           ? "Homework evaluator가 발견한 모든 어려움이 수정된 과제에서 해결되었으며, 학습 목표는 변하지 않았습니다."
           : `채택한 개선안이 적용되어 과제가 다시 측정되었습니다. ${remainingSummary}`}
@@ -1227,15 +1119,15 @@ export function CompleteScreen({ frictionCount, frictionResolved, frictionUnveri
         <p><span>{repairsApplied}</span><small>개선안 적용됨</small></p>
       </div>
       <div className="complete-actions">
-        <button type="button" className="button button--primary" onClick={onExport} disabled={!canExport}>
-          학생용 HTML 내려받기 <ArrowRight size={16} aria-hidden="true" />
-        </button>
+        {canExport && <button type="button" className="button button--primary" onClick={onExport}>
+          학생용 안내 내려받기 <ArrowRight size={16} aria-hidden="true" />
+        </button>}
         <button type="button" className="button button--secondary" onClick={startOver}>새 분석 시작하기</button>
       </div>
       {!canExport && (
-        <p className="export-hint">수정된 과제를 사용할 수 없습니다. 과제 개선안 미리보기로 돌아가 다시 작성을 시도하면 내보내기를 사용할 수 있습니다.</p>
+        <button type="button" className="text-button" onClick={() => goTo("preview")}>수정본 다시 확인하기</button>
       )}
-      <p className="educator-note">Homework evaluator는 과제 수준에서 발생할 수 있는 접근성 장벽을 식별합니다. 최종 판단은 언제나 교사의 몫입니다.</p>
+      <p className="educator-note">AI 분석에서 놓친 내용이 있을 수 있습니다. 배포 전에 원본과 학습 목표를 직접 확인해 주세요.</p>
     </main>
   );
 }

@@ -47,10 +47,10 @@ function renderStaticList(guide: StudentGuide): string {
       const after = names(step.dependents);
       return `<li id="list-${escapeHtml(step.id)}">
         <h3>${escapeHtml(stepName(step))}</h3>
-        <p class="meta">${escapeHtml(step.environment)}${step.estimatedMinutes ? ` · 약 ${step.estimatedMinutes}분` : ""}</p>
+        <p class="meta">${escapeHtml(step.environment)}${step.estimatedMinutes ? `, 약 ${step.estimatedMinutes}분` : ""}</p>
         ${step.excerpt ? `<blockquote>${escapeHtml(step.excerpt)}</blockquote>` : ""}
-        <p><strong>먼저 끝내야 할 행동:</strong> ${before.length ? escapeHtml(before.join(", ")) : "없음 — 바로 시작할 수 있어요"}</p>
-        <p><strong>이 행동을 끝내야 할 수 있는 행동:</strong> ${after.length ? escapeHtml(after.join(", ")) : "없음"}</p>
+        <p><strong>먼저 할 일:</strong> ${before.length ? escapeHtml(before.join(", ")) : "없습니다. 바로 시작하세요"}</p>
+        <p><strong>이어서 할 일:</strong> ${after.length ? escapeHtml(after.join(", ")) : "없음"}</p>
       </li>`;
     })
     .join("\n");
@@ -85,15 +85,17 @@ function renderTree(guide: StudentGuide, layout: TreeLayout): string {
 }
 
 const STYLE = `
-:root{--bg:#ffffff;--paper:#ffffff;--panel:#f5f8fe;--ink:#0f1c33;--muted:#566882;--accent:#1d4ed8;--accent-soft:#e3ecfd;--line:#d6e0f0;--before:#15803d;--before-soft:#dcfce7;--after:#ea580c;--after-soft:#ffedd5;color-scheme:light}
+:root{--bg:#f5f7fb;--paper:#ffffff;--panel:#f5f8fe;--ink:#0f1c33;--muted:#44556f;--accent:#1d4ed8;--accent-soft:#e3ecfd;--line:#ccd5e2;--before:#15803d;--before-soft:#dcfce7;--after:#a94312;--after-soft:#ffedd5;color-scheme:light;--font-body:system-ui,-apple-system,"Malgun Gothic","Apple SD Gothic Neo",sans-serif}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.6 system-ui,-apple-system,"Malgun Gothic","Apple SD Gothic Neo",sans-serif}
+body{margin:0;background:var(--bg);color:var(--ink);font:500 16px/1.7 var(--font-body)}
 main{max-width:1200px;margin:0 auto;padding:32px 16px 64px}
-header h1{margin:0 0 8px;color:var(--accent);font-size:clamp(1.6rem,4vw,2.3rem);line-height:1.2}
-.objective{margin:0 0 24px;padding:12px 16px;border-left:4px solid var(--accent);background:var(--accent-soft);border-radius:8px}
-.objective strong{display:block;color:var(--accent);font-size:.8rem}
-.hint{margin:0 0 12px;color:var(--muted);font-size:.9rem}
-.tree-wrap{overflow-x:auto;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:4px}
+html,body{overflow-x:clip}
+:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+header h1{margin:0 0 12px;color:var(--ink);font-size:clamp(1.6rem,4vw,2.3rem);line-height:1.2}
+.objective{margin:0 0 24px;padding:12px 16px;border:1px solid var(--line);background:var(--paper);border-radius:8px}
+.objective strong{display:block;color:var(--accent);font-size:1rem;font-weight:700;margin-bottom:8px}
+.hint{margin:0 0 12px;color:var(--muted);font-size:0.9rem}
+.tree-wrap{overflow-x:auto;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:4px}
 .tree{position:relative}
 .tree svg{position:absolute;inset:0}
 .edge{fill:none;stroke:var(--line);stroke-width:2;transition:stroke .15s}
@@ -103,30 +105,30 @@ marker path{fill:var(--muted)}
 .node{position:absolute;display:flex;flex-direction:column;gap:2px;padding:10px 12px;text-align:left;border:1.5px solid var(--line);border-radius:12px;background:var(--paper);color:var(--ink);font:inherit;cursor:pointer;overflow:hidden;transition:border-color .15s,box-shadow .15s}
 .node:hover{border-color:var(--accent)}
 .node:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
-.node .num{color:var(--accent);font-weight:700;font-size:.8rem}
-.node .label{flex:1;font-size:.86rem;font-weight:600;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-.node .env{color:var(--muted);font-size:.72rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.node .num{color:var(--accent);font-weight:700;font-size:0.875rem}
+.node .label{flex:1;font-size:0.875rem;font-weight:600;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.node .env{color:var(--muted);font-size:0.875rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .node.is-selected{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
 .node.is-before-far{border-color:var(--before)}
 .node.is-after-far{border-color:var(--after)}
 .node.is-before{border-color:var(--before);background:var(--before-soft)}
 .node.is-after{border-color:var(--after);background:var(--after-soft)}
-.legend{display:flex;flex-wrap:wrap;gap:6px 16px;margin:10px 0 0;padding:0;list-style:none;color:var(--muted);font-size:.8rem}
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;margin:10px 0 0;padding:0;list-style:none;color:var(--muted);font-size:0.875rem}
 .legend i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:6px;vertical-align:-1px;border:1.5px solid}
 .k-sel{border-color:var(--accent)!important;background:var(--accent-soft)}.k-before{border-color:var(--before)!important;background:var(--before-soft)}.k-after{border-color:var(--after)!important;background:var(--after-soft)}.k-far{border-color:var(--muted)!important;background:transparent}
 .detail{margin-top:20px;display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:16px}
-.card{background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:18px}
-.card h2{margin:0 0 10px;font-size:.85rem;letter-spacing:.02em;color:var(--muted)}
+.card{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:18px}
+.card h2{margin:0 0 12px;font-size:1rem;font-weight:700;color:var(--accent)}
 .card h3{margin:0 0 6px;font-size:1.15rem;line-height:1.35}
-.card .meta{margin:0 0 12px;color:var(--muted);font-size:.85rem}
-.card blockquote{margin:0;padding:12px 14px;border-left:4px solid var(--accent);background:var(--accent-soft);border-radius:6px;white-space:pre-wrap}
+.card .meta{margin:0 0 12px;color:var(--muted);font-size:0.875rem}
+.card blockquote{margin:0;padding:12px 14px;border:1px solid var(--line);background:var(--paper);border-radius:6px;white-space:pre-wrap}
 .card.before h2{color:var(--before)}.card.after h2{color:var(--after)}
 .card ul{margin:0;padding:0;list-style:none;display:grid;gap:6px}
 .card li button{width:100%;text-align:left;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:transparent;color:var(--ink);font:inherit;cursor:pointer}
 .card li button:hover{border-color:var(--accent)}
 .empty{color:var(--muted);margin:0}
-details{margin-top:28px;background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:14px 18px}
-summary{cursor:pointer;font-weight:600}
+details{margin-top:28px;background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:14px 18px}
+summary{cursor:pointer;font-size:1rem;font-weight:700;color:var(--accent)}
 .full-text{white-space:pre-wrap;margin:12px 0 0}
 .all-steps{margin-top:28px}
 .all-steps h2{font-size:1.1rem}
@@ -179,7 +181,7 @@ const SCRIPT = `
       n.classList.toggle("is-before-far", !!before[nid] && !near[nid]);
       n.classList.toggle("is-after-far", !!after[nid] && !near[nid]);
       if(nid === id){ n.setAttribute("aria-current", "step"); } else { n.removeAttribute("aria-current"); }
-      if(nid === id && focus){ n.focus({ preventScroll: true }); n.scrollIntoView({ block: "nearest", inline: "center", behavior: "smooth" }); }
+      if(nid === id && focus){ n.focus({ preventScroll: true }); n.scrollIntoView({ block: "nearest", inline: "center", behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" }); }
     });
     edges.forEach(function(e){
       var f = e.getAttribute("data-from"), t = e.getAttribute("data-to");
@@ -187,10 +189,10 @@ const SCRIPT = `
       e.classList.toggle("on-after", ((f === id || after[f]) && after[t]) ? true : false);
     });
     document.getElementById("d-title").textContent = name(s);
-    document.getElementById("d-meta").textContent = s.environment + (s.estimatedMinutes ? " · 약 " + s.estimatedMinutes + "분" : "");
-    var q = document.getElementById("d-excerpt"); q.textContent = s.excerpt || "과제 본문에 이 행동을 따로 설명한 문장이 없어요.";
-    fillList("d-before", s.prerequisites, "없음 — 바로 시작할 수 있어요.");
-    fillList("d-after", s.dependents, "이 행동에 기대는 다음 행동은 없어요.");
+    document.getElementById("d-meta").textContent = s.environment + (s.estimatedMinutes ? ", 약 " + s.estimatedMinutes + "분" : "");
+    var q = document.getElementById("d-excerpt"); q.textContent = s.excerpt || "관련 지시문을 찾지 못했습니다. 원본을 확인하세요.";
+    fillList("d-before", s.prerequisites, "없습니다. 바로 시작하세요.");
+    fillList("d-after", s.dependents, "이어서 할 일이 없습니다.");
     live.textContent = name(s) + " 선택됨. 먼저 할 행동 " + s.prerequisites.length + "개, 다음 행동 " + s.dependents.length + "개.";
   }
   nodes.forEach(function(n){ n.addEventListener("click", function(){ select(n.getAttribute("data-id"), false); }); });
@@ -233,13 +235,13 @@ export function renderStudentHtml(guide: StudentGuide, layout: TreeLayout = layo
 
   <section id="tree-area" aria-labelledby="tree-title" hidden>
     <h2 id="tree-title" class="sr-only">과제 단계 지도</h2>
-    <p class="hint">왼쪽에 있는 행동을 끝내야 오른쪽 행동을 할 수 있어요. 단계를 누르면 자세한 내용이 아래에 나와요.</p>
+    <p class="hint">단계를 선택하면 지시문과 먼저 할 일, 이어서 할 일을 확인합니다.</p>
     <div class="tree-wrap">${renderTree(guide, layout)}</div>
     <ul class="legend" aria-hidden="true">
-      <li><i class="k-sel"></i>선택한 행동</li>
-      <li><i class="k-before"></i>바로 앞에 끝내야 하는 행동</li>
-      <li><i class="k-after"></i>바로 다음에 할 수 있는 행동</li>
-      <li><i class="k-far"></i>더 멀리 연결된 행동(테두리만)</li>
+      <li><i class="k-sel"></i>선택한 단계</li>
+      <li><i class="k-before"></i>먼저 끝낼 단계</li>
+      <li><i class="k-after"></i>이어서 할 단계</li>
+      <li><i class="k-far"></i>간접 연결된 단계</li>
     </ul>
   </section>
 
@@ -251,11 +253,11 @@ export function renderStudentHtml(guide: StudentGuide, layout: TreeLayout = layo
       <blockquote id="d-excerpt"></blockquote>
     </article>
     <article class="card before">
-      <h2>② 먼저 끝내야 하는 행동</h2>
+      <h2>② 먼저 할 일</h2>
       <div id="d-before"></div>
     </article>
     <article class="card after">
-      <h2>③ 이 행동을 끝내야 할 수 있는 행동</h2>
+      <h2>③ 이어서 할 일</h2>
       <div id="d-after"></div>
     </article>
   </section>

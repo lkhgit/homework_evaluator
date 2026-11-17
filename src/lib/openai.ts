@@ -1,3 +1,4 @@
+import type { ResponseInputContent } from "openai/resources/responses/responses";
 import OpenAI from "openai";
 import { z, type ZodType } from "zod";
 
@@ -53,14 +54,15 @@ export function parseStructured<T>(schema: ZodType<T>, responseText: string | un
 export async function generateStructured<T>(options: {
   name: string;
   prompt: string;
+  files?: ResponseInputContent[];
   schema: ZodType<T>;
   effort: Effort;
   maxOutputTokens: number;
 }): Promise<T | null> {
-  const response = await getClient().responses.create({
+  const response = await getClient().responses.create({ store: false,
     model: MODEL,
     instructions: SYSTEM_PROMPT,
-    input: options.prompt,
+    input: options.files?.length ? [{ role: "user", content: [{ type: "input_text", text: options.prompt }, ...options.files] }] : options.prompt,
     max_output_tokens: options.maxOutputTokens,
     reasoning: { effort: options.effort },
     text: {

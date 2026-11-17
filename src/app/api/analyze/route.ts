@@ -1,3 +1,4 @@
+import { readTeacherRequest } from "@/lib/teacherRequest";
 import { NextResponse } from "next/server";
 
 import { describeModelFailure, generateStructured } from "@/lib/openai";
@@ -42,7 +43,9 @@ function describeSteps(graph: TaskGraph): string {
 }
 
 export async function POST(request: Request) {
-  const body = await request.json().catch(() => null);
+  const source = await readTeacherRequest(request);
+  if (source instanceof Response) return source;
+  const { body } = source;
   const parsed = analysisRequestSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json(
@@ -67,6 +70,7 @@ export async function POST(request: Request) {
     // level while everything else in this file runs at MINIMAL to save quota.
     const graph = await generateStructured({
       name: "task_graph",
+      files: source.files,
       prompt: `The educator has locked this learning objective:
 
 <learning_objective>
@@ -96,6 +100,7 @@ ${assignmentText}
     // Pass two: repairs for the steps that need one, keyed to the graph above.
     const repairProposals = await generateStructured({
       name: "repair_proposals",
+      files: source.files,
       prompt: `This assignment has already been decomposed. Propose repairs for the steps that impose a demand the locked objective does not require.
 
 <learning_objective>

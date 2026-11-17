@@ -14,8 +14,8 @@ import type { Analysis } from "@/lib/schema";
 export const LANE_LABEL_W = 136;
 export const COL_W = 224;
 export const NODE_W = 188;
-export const NODE_H = 132;
-export const LANE_H = 172;
+export const NODE_H = 156;
+export const LANE_H = 196;
 const TRACK_ROW_H = 28;
 const EDGE_PAD = 24;
 

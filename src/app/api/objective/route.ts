@@ -1,3 +1,4 @@
+import { readTeacherRequest } from "@/lib/teacherRequest";
 import { NextResponse } from "next/server";
 
 import { describeModelFailure, generateStructured } from "@/lib/openai";
@@ -7,7 +8,9 @@ import { objectiveExtractionSchema, objectiveRequestSchema } from "@/lib/schema"
 export const maxDuration = 60;
 
 export async function POST(request: Request) {
-  const body = await request.json().catch(() => null);
+  const source = await readTeacherRequest(request);
+  if (source instanceof Response) return source;
+  const { body } = source;
   const parsed = objectiveRequestSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json(
@@ -29,6 +32,7 @@ export async function POST(request: Request) {
   try {
     const objective = await generateStructured({
       name: "objective_extraction",
+      files: source.files,
       prompt: `Identify what this assignment is actually trying to teach. Give at most three candidate learning objectives, most likely first, each phrased as what the student should be able to do.
 
 If the assignment states an objective explicitly, quote it as the source. Otherwise infer it from the content and set source to "inferred".

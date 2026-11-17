@@ -1,7 +1,8 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { Check } from "lucide-react";
-import Link from "next/link";
+import WorkspaceHeader from "@/components/WorkspaceHeader";
 import type { WorkflowStage } from "@/components/WorkflowContext";
 
 const PROGRESS = [
@@ -9,12 +10,12 @@ const PROGRESS = [
   // stand ("Goal Lock", "Journey Scan"), so calling this one "New Analysis"
   // made stepping back to it read as though it would discard your work.
   { number: 1, label: "과제", target: "analyze", stages: ["analyze", "loading"] },
-  { number: 2, label: "목표 확정", target: "goal", stages: ["goal"] },
+  { number: 2, label: "학습 목표", target: "goal", stages: ["goal"] },
   { number: 3, label: "과제 분석", target: "journey", stages: ["journey"] },
   { number: 4, label: "어려움", target: "barrier", stages: ["barrier"] },
-  { number: 5, label: "개선", target: "repair", stages: ["repair"] },
-  { number: 6, label: "검증", target: "constraint", stages: ["constraint"] },
-  { number: 7, label: "미리보기", target: "preview", stages: ["preview"] },
+  { number: 5, label: "개선안", target: "repair", stages: ["repair"] },
+  { number: 6, label: "접근 조건", target: "constraint", stages: ["constraint"] },
+  { number: 7, label: "수정본", target: "preview", stages: ["preview"] },
 ] as const;
 
 
@@ -34,13 +35,16 @@ export default function AppNav({ stage, visited, onNavigate }: AppNavProps) {
         (item.stages as readonly WorkflowStage[]).includes(stage),
       );
 
-  return (
-    <header className="app-nav">
-      <Link href="/" className="brand-lockup" aria-label="Homework evaluator, 화면 선택으로">
-        <span>Homework evaluator</span>
-      </Link>
+  const navigation = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const container = navigation.current;
+    const active = container?.querySelector<HTMLElement>(".is-active") ?? (stage === "complete" ? container?.querySelector<HTMLElement>("li:last-child") : null);
+    if (container && active) container.scrollTo({ left: active.offsetLeft - container.offsetLeft - (container.clientWidth - active.offsetWidth) / 2 });
+  }, [stage]);
 
-      <nav aria-label="분석 진행 단계" className="progress-nav">
+  return (
+    <WorkspaceHeader mode="teacher">
+      <nav ref={navigation} aria-label="분석 진행 단계" className="progress-nav">
         <ol>
           {PROGRESS.map((item, index) => {
             const active = index === activeIndex;
@@ -85,7 +89,6 @@ export default function AppNav({ stage, visited, onNavigate }: AppNavProps) {
         </ol>
       </nav>
 
-      <Link href="/student" className="mode-switch">학생용 보기</Link>
-    </header>
+    </WorkspaceHeader>
   );
 }

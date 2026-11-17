@@ -32,7 +32,7 @@ export async function POST(request: Request) {
   try {
     const schema = z.toJSONSchema(studentSchema) as Record<string, unknown>;
     delete schema.$schema;
-    const response = await getClient().responses.create({ model: MODEL, instructions: STUDENT_INSTRUCTIONS + " requirements에 모든 필수 요구사항을 나열하고 연결된 단계 번호(1부터)를 stepNumbers에, 제출 전 점검에 반영했다면 submissionCheck를 true로 기록한다. 연결하지 못한 조건도 반드시 기록한다.", input: [{ role: "user", content: input }], max_output_tokens: 12000, text: { format: { type: "json_schema", name: "student_guide", strict: true, schema } } });
+    const response = await getClient().responses.create({ store: false, model: MODEL, instructions: STUDENT_INSTRUCTIONS + " requirements에 모든 필수 요구사항을 나열하고 연결된 단계 번호(1부터)를 stepNumbers에, 제출 전 점검에 반영했다면 submissionCheck를 true로 기록한다. 연결하지 못한 조건도 반드시 기록한다.", input: [{ role: "user", content: input }], max_output_tokens: 12000, text: { format: { type: "json_schema", name: "student_guide", strict: true, schema } } });
     const result = parseStructured(studentSchema, response.output_text);
     if (!result) return Response.json({ error: "분석 결과를 읽지 못했습니다. 자료를 나누어 다시 시도해 주세요." }, { status: 502 });
     for (const requirement of result.requirements) {

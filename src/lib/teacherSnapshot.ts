@@ -7,6 +7,7 @@ export interface TeacherSnapshot {
   stage: WorkflowStage;
   assignmentDraft: string;
   analyzedText: string;
+  analyzedDraft?: string;
   objective: string;
   baseAnalysis: Analysis;
   steps: Step[];
