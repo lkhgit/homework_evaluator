@@ -567,7 +567,7 @@ button:disabled { cursor: not-allowed; }
 .goal-panel { border-left-width: 1px; padding: 24px; }
 .goal-panel h2 { font-size: 24px; margin: 0 0 20px; font-weight: 700; }
 .goal-panel .field-help { margin-bottom: 0; }
-.journey-toolbar { padding: 24px; background: var(--paper); }
+.journey-toolbar { min-height: 0; padding: 20px 24px; background: var(--paper); }
 .journey-toolbar h2 { font-size: 20px; font-weight: 700; line-height: 1.5; margin: 0 0 4px; }
 .journey-toolbar > div > p:last-child { font-size: 14px; }
 .journey-controls button { width: 44px; height: 44px; border-radius: 8px; }
@@ -650,11 +650,81 @@ button:disabled { cursor: not-allowed; }
 .guide-heading .button { flex-shrink: 0; }
 .student-flow { padding-bottom: 24px; margin-bottom: 24px; border-bottom: 1px solid var(--line); }
 .student-flow h2 { font-size: 16px; font-weight: 700; margin: 0 0 16px; }
-.student-flow-track { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; list-style: none; margin: 0; padding: 0; }
-.student-flow-track button { display: flex; width: 100%; height: 100%; min-height: 52px; align-items: center; gap: 12px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); color: var(--muted); font-size: 14px; line-height: 1.5; text-align: left; cursor: pointer; }
-.student-flow-track button:hover { border-color: var(--rose-deep); color: var(--ink); }
-.student-flow-track button.is-selected { border-color: var(--rose-deep); background: var(--blush-pale); color: var(--rose-deep); font-weight: 600; }
-.student-flow-number { flex-shrink: 0; font-variant-numeric: tabular-nums; }
+
+.student-flow-track {
+  --flow-label-width: 120px;
+  --flow-card-width: 216px;
+  display: grid;
+  grid-auto-rows: var(--flow-row-height);
+  column-gap: var(--flow-gap);
+  width: max-content;
+  min-width: 100%;
+  margin: 0;
+  padding-right: 16px;
+  list-style: none;
+  isolation: isolate;
+}
+.flow-viewport {
+  max-height: 414px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--paper);
+  scrollbar-color: var(--line-strong) var(--cream);
+}
+.flow-viewport:focus-visible { outline-offset: 2px; }
+.flow-lane { grid-column: 1 / -1; margin-right: -16px; background: var(--cream); border-bottom: 1px solid var(--line); }
+.flow-lane:nth-child(even) { background: var(--blush-pale); }
+.flow-lane-label {
+  grid-column: 1;
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  padding: 12px;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  background: var(--paper);
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 700;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  line-height: 1.45;
+}
+.flow-step { position: relative; display: grid; align-items: center; min-width: 0; }
+.flow-node {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  height: 114px;
+  padding: 10px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--paper);
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+.flow-node:hover, .flow-node.is-selected { border-color: var(--rose-deep); background: var(--blush-pale); }
+.flow-node.is-selected { box-shadow: inset 0 0 0 1px var(--rose-deep); }
+.flow-node:focus-visible { outline-offset: 2px; }
+.flow-node-heading { display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 8px; }
+.student-flow-number { color: var(--rose-deep); font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.flow-node-action { display: inline-flex; align-items: center; gap: 4px; color: var(--rose-dark); font-size: 13px; font-weight: 700; }
+.flow-node strong { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; overflow-wrap: anywhere; font-size: 15px; line-height: 1.4; }
+.flow-arrow { position: absolute; left: 100%; fill: none; stroke: var(--muted); stroke-width: 1.5; stroke-linejoin: round; pointer-events: none; }
+.flow-arrow--switch { stroke: var(--rose-deep); stroke-width: 2; }
+@media (max-width: 580px) {
+  .student-flow-track { --flow-label-width: 76px; --flow-card-width: 148px; }
+  .flow-lane-label { padding: 8px; font-size: 13px; }
+  .flow-node { padding-inline: 8px; }
+}
+
 .student-step { background: var(--paper); border: 1px solid var(--line); border-radius: 12px; padding: 32px; overflow-wrap: anywhere; }
 .student-step h2 { font-size: 24px; font-weight: 700; line-height: 1.5; margin: 0 0 24px; scroll-margin-top: 24px; }
 .student-step h3 { font-size: 16px; font-weight: 700; margin: 24px 0 12px; }
@@ -683,7 +753,6 @@ button:disabled { cursor: not-allowed; }
 @media (max-width: 1000px) {
   .analysis-grid { grid-template-columns: minmax(0, 1fr) 240px; }
   .progress-nav ol { gap: 20px; }
-  .student-flow-track { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 800px) {
   .analysis-grid, .constraint-grid { grid-template-columns: minmax(0, 1fr); }
@@ -721,8 +790,6 @@ button:disabled { cursor: not-allowed; }
   .screen-footer-actions { flex-direction: column; align-items: stretch; }
   .barrier-grid { gap: 24px; }
   .guide-heading { flex-direction: column; gap: 16px; }
-  .student-flow-track { grid-template-columns: minmax(0, 1fr); }
-  .student-flow-track button { min-height: 48px; }
   .student-step dl { grid-template-columns: minmax(0, 1fr); gap: 8px; }
   .student-step dd { margin-bottom: 16px; }
   .student-step h2 { font-size: 20px; }
@@ -797,18 +864,6 @@ h1, h2 { text-wrap: balance; }
 .teacher-analysis-warning ol { margin: 8px 0 0; padding-left: 24px; list-style: decimal; line-height: 1.7; }
 .teacher-analysis-warning li + li { margin-top: 8px; }
 
-/* The DOM stays in task order while the diagram turns at each row. */
-.student-flow-track { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 48px; }
-.student-flow-track > li { position: relative; min-width: 0; grid-column: var(--flow-col); grid-row: var(--flow-row); }
-.student-flow-track .flow-node { min-height: 148px; display: flex; flex-direction: column; align-items: flex-start; justify-content: flex-start; gap: 12px; padding: 20px; border-color: var(--line-strong); background: var(--paper); box-shadow: none; }
-.student-flow-track .flow-node strong { font-size: 20px; line-height: 1.5; font-weight: 700; color: var(--ink); overflow-wrap: anywhere; }
-.student-flow-number { font-size: 18px; font-weight: 600; color: var(--rose-deep); }
-.flow-environment { margin-top: auto; color: var(--muted); font-size: 14px; }
-.flow-arrow { position: absolute; color: var(--rose-deep); pointer-events: none; }
-.flow-arrow--right { right: -40px; top: calc(50% - 16px); }
-.flow-arrow--left { left: -40px; top: calc(50% - 16px); }
-.flow-arrow--down { bottom: -40px; left: calc(50% - 16px); }
-.flow-arrow--2, .flow-arrow--1 { display: none; }
 .student-step .step-heading h2 { font-size: 32px; line-height: 1.5; }
 .student-activity { max-width: 70ch; margin-bottom: 24px; font-size: 18px; line-height: 1.85; white-space: normal; word-break: keep-all; overflow-wrap: break-word; }
 .student-activity h3 { margin: 0 0 12px; color: var(--muted); font-size: 14px; }
@@ -816,18 +871,8 @@ h1, h2 { text-wrap: balance; }
 .student-support-details { padding: 20px 0; border-top: 1px solid var(--line); }
 .student-support-details > summary { cursor: pointer; font-size: 14px; color: var(--muted); }
 .student-support-details dl { margin-top: 20px; }
-@media (max-width: 1000px) {
-  .student-flow-track { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .student-flow-track > li { grid-column: var(--flow-col-tablet); grid-row: var(--flow-row-tablet); }
-  .flow-arrow--3 { display: none; }
-  .flow-arrow--2 { display: block; }
-}
+
 @media (max-width: 580px) {
-  .student-flow-track { grid-template-columns: minmax(0, 1fr); gap: 48px; }
-  .student-flow-track > li { grid-column: 1; grid-row: auto; }
-  .flow-arrow--2 { display: none; }
-  .flow-arrow--1 { display: block; }
-  .student-flow-track .flow-node { min-height: 120px; }
   .student-step .step-heading h2 { font-size: 26px; }
 }
 
@@ -879,10 +924,6 @@ button.progress-link { padding: 8px; border: 1px solid var(--line-strong); }
 .progress-link--static { opacity: .75; }
 .is-active .progress-link--static { opacity: 1; }
 .flow-instruction { margin: 0 0 20px; font-size: 15px; color: var(--muted); }
-.flow-node-heading { display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 12px; }
-.flow-node-action { font-size: 14px; font-weight: 600; color: var(--rose-deep); text-decoration: underline; text-underline-offset: 4px; }
-.student-flow-track button.is-selected { box-shadow: inset 0 0 0 1px var(--rose-deep); }
-.flow-node.is-selected .flow-node-action { text-decoration: none; }
 .repair-row-actions button[aria-pressed="true"] { background: var(--rose-deep); color: var(--paper); border-color: var(--rose-deep); }
 .student-support-details > summary, .source-disclosure > summary, .preview-options > summary, .journey-map > summary, .teacher-revision > summary, .teacher-history > details > summary { padding: 12px 16px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--paper); min-height: 48px; }
 summary:hover { background: var(--blush-pale); }

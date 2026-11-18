@@ -314,18 +314,14 @@ export function JourneyScan({ analysis, report }: JourneyScanProps) {
   const selectedStep = analysis.steps[selectedStepIndex];
   const selectedFrictions = selectedStep ? frictionByStep.get(selectedStep.id) ?? [] : [];
 
-  function selectStep(index: number) {
+  function selectStep(index: number, showDetail = true) {
     const nextStep = analysis.steps[index];
     if (!nextStep) return;
 
     setSelectedStepId(nextStep.id);
-    window.requestAnimationFrame(() => {
-      const heading = document.getElementById("selected-step-title");
-      heading?.focus({ preventScroll: true });
-      if (window.matchMedia("(max-width: 580px)").matches) {
-        heading?.scrollIntoView({ block: "start", behavior: "auto" });
-      }
-    });
+    if (showDetail) {
+      window.requestAnimationFrame(() => document.getElementById("selected-step-title")?.focus());
+    }
   }
 
   function affectedStepNumbers(friction: FrictionMoment): string {
@@ -345,13 +341,13 @@ export function JourneyScan({ analysis, report }: JourneyScanProps) {
         <header className="journey-toolbar">
           <div>
             <h2 id="journey-overview-title">과제 수행 순서</h2>
-            <p>단계를 선택하면 필요한 도구와 예상되는 어려움을 확인할 수 있습니다.</p>
+            <p>사용 환경별로 나누어 표시했습니다.</p>
           </div>
           <nav className="journey-controls" aria-label="과제 단계 이동">
             <span aria-live="polite">{analysis.steps.length}단계 중 {selectedStepIndex + 1}단계</span>
             <button
               type="button"
-              onClick={() => selectStep(selectedStepIndex - 1)}
+              onClick={() => selectStep(selectedStepIndex - 1, false)}
               disabled={selectedStepIndex === 0}
               aria-label="이전 단계 보기"
             >
@@ -359,7 +355,7 @@ export function JourneyScan({ analysis, report }: JourneyScanProps) {
             </button>
             <button
               type="button"
-              onClick={() => selectStep(selectedStepIndex + 1)}
+              onClick={() => selectStep(selectedStepIndex + 1, false)}
               disabled={selectedStepIndex === analysis.steps.length - 1}
               aria-label="다음 단계 보기"
             >
