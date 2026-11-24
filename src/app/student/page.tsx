@@ -51,7 +51,7 @@ export default function StudentPage() {
   async function analyze() {
     const id = ++generation.current;
     setHiddenWarnings([]);
-    setError(""); setBusy(true); setResult(null); setReferences({});
+    setError(""); setBusy(true); setResult(null); setReferences({}); setSearching(null);
     const body = new FormData(); body.append("text", text);
     files.forEach(file => body.append("files", file));
     try {
@@ -62,12 +62,19 @@ export default function StudentPage() {
     } catch (e) { if (id === generation.current) setError(e instanceof Error ? e.message : "분석에 실패했습니다."); }
     finally { if (id === generation.current) setBusy(false); }
   }
-  async function search(index: number, action: string) {
-    if (references[index]) return;
+  async function search(index: number) {
+    if (!result || searching !== null || references[index]?.length) return;
+    const step = result.steps[index];
+    const terms = step.terms.map(({ term }) => term.trim().slice(0, 60)).filter(Boolean).slice(0, 4);
+    const query = [
+      `과제: ${result.title.trim().slice(0, 200)}`,
+      `활동: ${step.action.trim().slice(0, 500)}`,
+      ...(terms.length ? [`관련 용어: ${terms.join(", ")}`] : []),
+    ].join("\n");
     const id = generation.current;
     setSearching(index); setError("");
     try {
-      const response = await fetch("/api/references", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ query: action }) });
+      const response = await fetch("/api/references", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ query }) });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "검색에 실패했습니다.");
       if (id === generation.current) setReferences(current => ({ ...current, [index]: data.links }));
@@ -111,8 +118,8 @@ export default function StudentPage() {
         <dl><dt>준비물</dt><dd>{step.materials || "지침에 명시되지 않음"}</dd><dt>완료 확인</dt><dd>{step.completion || "지침에 명시되지 않음"}</dd><dt>기록과 주의사항</dt><dd>{step.caution || "지침에 명시되지 않음"}</dd><dt>어려울 수 있는 부분</dt><dd>{step.difficulties || "지침에 명시되지 않음"}</dd></dl></details>
         <details className="source-disclosure"><summary>원문과 수행 조건 확인</summary><Sources sources={step.sources} urls={urls} /></details>
         {step.terms.length > 0 && <div>용어: {step.terms.map((term, j) => <details className="term" key={j} onMouseEnter={event => { event.currentTarget.open = true; }} onMouseLeave={event => { if (!event.currentTarget.contains(document.activeElement)) event.currentTarget.open = false; }}><summary>{term.term}</summary><p>{term.meaning}</p></details>)}</div>}
-        {!references[i] && <button type="button" className="button button--secondary" disabled={searching !== null} onClick={() => search(i, `${result.title}: ${step.action}`)}>{searching === i ? "검색 중…" : "참고 자료 찾기"}</button>}
-        {references[i] && (references[i].length ? <ul>{references[i].map(link => <li key={link.url}><a href={link.url} target="_blank" rel="noopener noreferrer">{link.title || link.url}</a></li>)}</ul> : <p>검색된 자료가 없습니다.</p>)}
+        {!references[i]?.length && <button type="button" className="button button--secondary" disabled={searching !== null} onClick={() => search(i)}>{searching === i ? "검색 중…" : references[i] ? "참고 자료 다시 찾기" : "참고 자료 찾기"}</button>}
+        {references[i] && (references[i].length ? <ul>{references[i].map(link => <li key={link.url}><a href={link.url} target="_blank" rel="noopener noreferrer">{link.title || link.url}</a></li>)}</ul> : searching !== i && <p>이 단계의 참고 자료를 찾지 못했습니다.</p>)}
       </section>)}
       {selectedStep === result.steps.length && <section className="student-step submission-check" id="submission-check"><h2 tabIndex={-1}>제출 전 점검</h2><h3>지침에 명시된 평가 기준</h3>{result.statedCriteria.length ? result.statedCriteria.map((criterion, i) => <div key={i}><p>{criterion.text}</p><Sources sources={criterion.sources} urls={urls} /></div>) : <p>지침에 명시된 평가 기준이 없습니다.</p>}<h3>추가로 확인할 내용 (AI 제안)</h3><ul>{result.suggestedCriteria.map((item, i) => <li key={i}>{item}</li>)}</ul></section>}
       </div>
@@ -124,7 +131,7 @@ export default function StudentPage() {
     </article>}
     <footer className="student-storage"><span>이 브라우저에 자동 저장됩니다.</span>{(text || files.length > 0 || result) && <button type="button" className="text-button" disabled={!loaded || busy} onClick={() => {
       if ((text || files.length) && !window.confirm("현재 자료와 안내를 지우고 새 과제를 시작할까요?")) return;
-      generation.current++; setText(""); setFiles([]); setResult(null); setReferences({}); setEditing(false); setError("");
+      generation.current++; setText(""); setFiles([]); setResult(null); setReferences({}); setSearching(null); setEditing(false); setError("");
     }}>새 과제 시작</button>}</footer>
   </main></>;
 }
